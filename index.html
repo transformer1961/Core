@@ -70,34 +70,11 @@
   </div>
 
   <script>
-    function formatUptime(seconds) {
-      if (!seconds) return '—';
-      const days = Math.floor(seconds / 86400);
-      const hours = Math.floor((seconds % 86400) / 3600);
-      return days > 0 ? `${days}d ${hours}h` : `${hours}h`;
-    }
-
+    // Placeholder — will be replaced by a fetch to /api/bot/stats
     async function loadStats() {
-      try {
-        const res = await fetch('/api/bot-stats');
-        if (!res.ok) throw new Error('bad response');
-        const data = await res.json();
-
-        const statusEl = document.getElementById('stat-status');
-        statusEl.textContent = data.online ? 'Online' : 'Offline';
-        statusEl.classList.toggle('status-online', data.online);
-
-        document.getElementById('stat-guilds').textContent = data.guilds ?? '—';
-        document.getElementById('stat-incidents').textContent = data.incidentsHandledTotal ?? '—';
-        document.getElementById('stat-uptime').textContent = formatUptime(data.uptimeSeconds);
-      } catch (err) {
-        console.error('Failed to load bot stats', err);
-        document.getElementById('stat-status').textContent = 'Unavailable';
-      }
+      // fetch('/api/bot/stats').then(r => r.json()).then(data => { ...populate... })
     }
-
     loadStats();
-    setInterval(loadStats, 20000); // refresh every 20s
   </script>
 
 </body>
