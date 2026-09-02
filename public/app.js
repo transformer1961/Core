@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginButton = document.querySelector('.btn-login');
   const ownerPage = document.body.dataset.page === 'owner';
   let sessionRole = null;
+  let sessionPermissions = [];
 
   async function loadSession() {
     try {
@@ -21,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
           loginButton.dataset.authenticated = 'true';
         }
         sessionRole = data.user?.role || null;
+        sessionPermissions = data.user?.permissions || [];
         window.dispatchEvent(new Event('sns-session-loaded'));
         return true;
       }
@@ -158,6 +160,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const botCountLabel = document.getElementById('bot-count-label');
     const registerBotForm = document.getElementById('register-bot-form');
     const botToken = document.getElementById('bot-token');
+    const accessPanel = document.getElementById('access-panel');
+    const accessForm = document.getElementById('access-form');
+    const accessList = document.getElementById('access-list');
 
     const STORAGE_KEY = 'sns-owner-panel-state';
     const getOwnerState = () => {
@@ -266,6 +271,21 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('Bot registry unavailable:', error);
         botSelect.innerHTML = '<option value="">Registry unavailable</option>';
         botList.innerHTML = '<p class="empty-state">The bot registry could not be reached.</p>';
+      }
+    };
+
+    const loadAccess = async () => {
+      if (!accessPanel || sessionRole !== 'owner') return;
+      accessPanel.hidden = false;
+      try {
+        const response = await fetch('/api/access', { credentials: 'same-origin' });
+        if (!response.ok) throw new Error('Failed to load permissions');
+        const data = await response.json();
+        if (accessList) {
+          accessList.innerHTML = (data.permissions || []).map((record) => `<div class="access-row"><strong>${escapeHtml(record.userId)}</strong><span>${escapeHtml(record.permissions?.join(', ') || 'No permissions')} · ${record.enabled ? 'Enabled' : 'Disabled'}</span></div>`).join('') || '<p class="empty-state">No custom staff permissions yet.</p>';
+        }
+      } catch (error) {
+        setFeedback(error.message, 'warning');
       }
     };
 
@@ -379,6 +399,29 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    if (accessForm) {
+      accessForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const formData = new FormData(accessForm);
+        const permissions = formData.getAll('permission');
+        try {
+          const response = await fetch('/api/access', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: formData.get('userId'), role: 'admin', permissions, enabled: true }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Could not save permissions');
+          setFeedback(`Permissions saved for ${data.permission.userId}.`, 'success');
+          accessForm.reset();
+          await loadAccess();
+        } catch (error) {
+          setFeedback(error.message, 'warning');
+        }
+      });
+    }
+
     if (botList) {
       botList.addEventListener('click', async (event) => {
         const reviewButton = event.target.closest('[data-bot-review]');
@@ -419,6 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     applyOwnerState();
     loadBots();
+    loadAccess();
   }
 
   loadSession();

@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const { getDb } = require('./utils/db');
-const { getSession } = require('./utils/auth');
 const { getSession, hasPermission } = require('./utils/auth');
 
 function json(statusCode, body) {

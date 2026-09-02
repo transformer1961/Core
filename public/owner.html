@@ -86,6 +86,31 @@
         </div>
       </section>
 
+      <section class="card access-panel" id="access-panel" aria-labelledby="access-title" hidden>
+        <div class="card-header-row">
+          <div>
+            <h2 id="access-title">Staff permissions</h2>
+            <p class="card-subtitle">Grant only the controls each staff member needs.</p>
+          </div>
+          <span class="mini-pill">Owner only</span>
+        </div>
+        <form id="access-form" class="access-form">
+          <label class="composer-field" for="access-user-id">
+            <span>Discord user ID</span>
+            <input id="access-user-id" name="userId" required inputmode="numeric" pattern="[0-9]{5,25}" placeholder="123456789012345678" />
+          </label>
+          <div class="permission-options" aria-label="Permissions">
+            <label><input type="checkbox" name="permission" value="bot.read" /> View bots</label>
+            <label><input type="checkbox" name="permission" value="bot.register" /> Register bots</label>
+            <label><input type="checkbox" name="permission" value="bot.approve" /> Approve bots</label>
+            <label><input type="checkbox" name="permission" value="bot.command" /> Send commands</label>
+            <label><input type="checkbox" name="permission" value="bot.delete" /> Delete bots</label>
+          </div>
+          <button class="owner-action primary" type="submit">Save permissions</button>
+        </form>
+        <div id="access-list" class="access-list" aria-live="polite"></div>
+      </section>
+
       <div class="owner-grid">
         <div class="card action-card">
           <div class="card-header-row">
