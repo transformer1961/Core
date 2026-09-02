@@ -1,4 +1,4 @@
-const { cookie, encryptSession, getDiscordConfig, isApprovedOwner, parseCookies, stateCookieName, verifyState, sessionCookieName } = require('./utils/auth');
+const { cookie, encryptSession, getAuthorization, getDiscordConfig, parseCookies, stateCookieName, verifyState, sessionCookieName } = require('./utils/auth');
 
 function redirect(path) {
   return { statusCode: 302, headers: { Location: path }, body: '' };
@@ -36,14 +36,16 @@ exports.handler = async (event) => {
 
     const user = await userResponse.json();
     const guilds = await guildResponse.json();
-    if (!isApprovedOwner(user.id, guilds)) return redirect('/owner.html?auth=not-approved');
+    const authorization = await getAuthorization(user.id, guilds);
+    if (!authorization) return redirect('/owner.html?auth=not-approved');
 
     const session = encryptSession({
       userId: user.id,
       username: user.username,
       globalName: user.global_name || user.username,
       avatar: user.avatar || null,
-      role: 'owner',
+      role: authorization.role,
+      permissions: authorization.permissions,
     });
     return {
       statusCode: 302,

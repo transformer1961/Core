@@ -101,6 +101,8 @@ The initial queue uses `SNS_ADMIN_KEY` for server-side owner integration and `BO
 
 After signing in, an owner can register a bot with `POST /api/bots` using a lowercase `botId` and display `name`. SNS Core stores a SHA-256 hash of the generated secret and returns the raw secret only in the registration response. Store that secret in the bot's Railway variables; it cannot be recovered from SNS Core.
 
+For automatic enrollment, a bot can send `POST /api/bot/enroll` with `botId` and `name`, using the `x-sns-enrollment-key` header. The request creates a `pending` bot and returns its token. An owner or staff member must approve it in the Owner Panel before the bot can claim commands. Set `SNS_STAFF_IDS` for trusted staff and keep `SNS_ENROLLMENT_KEY` only on bot hosts.
+
 ## Local development
 
 1. Install dependencies

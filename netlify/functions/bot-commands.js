@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { getDb } = require('./utils/db');
 const { getSession } = require('./utils/auth');
+const { getSession, hasPermission } = require('./utils/auth');
 const { authenticateBot, getHeader } = require('./utils/bot-auth');
 
 const allowedCommands = new Set(['enable', 'disable', 'restart', 'shutdown', 'trigger_lockdown']);
@@ -22,7 +23,7 @@ function timingSafeEqualText(actual, expected) {
 
 function isAdmin(event) {
   const session = getSession(event);
-  return session?.role === 'owner' || timingSafeEqualText(getHeader(event, 'x-sns-admin-key'), process.env.SNS_ADMIN_KEY);
+  return hasPermission(session, 'bot.command') || timingSafeEqualText(getHeader(event, 'x-sns-admin-key'), process.env.SNS_ADMIN_KEY);
 }
 
 exports.handler = async (event) => {

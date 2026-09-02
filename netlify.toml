@@ -26,6 +26,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/bot/enroll"
+  to = "/.netlify/functions/bot-enroll"
+  status = 200
+
+[[redirects]]
+  from = "/api/access"
+  to = "/.netlify/functions/access-control"
+  status = 200
+
+[[redirects]]
   from = "/api/auth/discord"
   to = "/.netlify/functions/auth-discord"
   status = 200

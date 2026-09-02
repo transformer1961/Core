@@ -15,6 +15,7 @@ exports.handler = async (event) => {
         globalName: session.globalName,
         avatar: session.avatar,
         role: session.role,
+        permissions: session.permissions || [],
       },
     }),
   };

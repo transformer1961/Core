@@ -27,6 +27,7 @@ async function authenticateBot(event, rawBody) {
   const bot = await (await getDb()).collection('bots').findOne({
     botId,
     secretHash: hashToken(token),
+    status: 'active',
   });
   return bot || null;
 }

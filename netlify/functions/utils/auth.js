@@ -73,6 +73,10 @@ function getSession(event) {
   return decryptSession(parseCookies(event)[sessionCookieName]);
 }
 
+function hasPermission(session, permission) {
+  return session?.role === 'owner' || session?.permissions?.includes('*') || session?.permissions?.includes(permission);
+}
+
 function cookie(name, value, maxAge) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
   return `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`;
@@ -94,12 +98,29 @@ function getDiscordConfig() {
   };
 }
 
-function isApprovedOwner(userId, guilds = []) {
+async function getAuthorization(userId, guilds = []) {
   const ownerIds = (process.env.SNS_OWNER_IDS || '').split(',').map((id) => id.trim()).filter(Boolean);
-  if (ownerIds.includes(userId)) return true;
+  if (ownerIds.includes(userId)) return { role: 'owner', permissions: ['*'] };
+
+  const staffIds = (process.env.SNS_STAFF_IDS || '').split(',').map((id) => id.trim()).filter(Boolean);
+  if (staffIds.includes(userId)) return { role: 'admin', permissions: ['*'] };
 
   const allowedGuildIds = (process.env.SNS_ALLOWED_GUILD_IDS || '').split(',').map((id) => id.trim()).filter(Boolean);
-  return allowedGuildIds.length > 0 && guilds.some((guild) => allowedGuildIds.includes(guild.id) && guild.owner);
+  if (allowedGuildIds.length > 0 && guilds.some((guild) => allowedGuildIds.includes(guild.id) && guild.owner)) {
+    return { role: 'owner', permissions: ['*'] };
+  }
+
+  const { getDb } = require('./db');
+  const record = await (await getDb()).collection('access_controls').findOne({ userId, enabled: true });
+  return record ? { role: record.role, permissions: record.permissions || [] } : null;
+}
+
+async function getUserRole(userId, guilds = []) {
+  return (await getAuthorization(userId, guilds))?.role || null;
+}
+
+async function isApprovedOwner(userId, guilds = []) {
+  return Boolean(await getAuthorization(userId, guilds));
 }
 
 module.exports = {
@@ -108,7 +129,10 @@ module.exports = {
   decryptSession,
   encryptSession,
   getDiscordConfig,
+  getAuthorization,
+  getUserRole,
   getSession,
+  hasPermission,
   isApprovedOwner,
   parseCookies,
   signState,

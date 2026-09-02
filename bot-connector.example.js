@@ -65,7 +65,20 @@ async function reportCommand({ url, botId, token, secret, commandId, status, res
   return { ok: response.ok, status: response.status, body: await response.text() };
 }
 
-module.exports = { sendHeartbeat, sendEvent, claimCommand, reportCommand };
+async function requestEnrollment({ url, enrollmentKey, botId, name }) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-sns-enrollment-key': enrollmentKey,
+    },
+    body: JSON.stringify({ botId, name }),
+  });
+
+  return { ok: response.ok, status: response.status, body: await response.json() };
+}
+
+module.exports = { sendHeartbeat, sendEvent, requestEnrollment, claimCommand, reportCommand };
 
 // Example usage:
 // const { sendHeartbeat } = require('./bot-connector.example');

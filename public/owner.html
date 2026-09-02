@@ -50,6 +50,42 @@
         </div>
       </div>
 
+      <section class="card bot-registry-panel" aria-labelledby="bot-registry-title">
+        <div class="card-header-row">
+          <div>
+            <h2 id="bot-registry-title">Connected bots</h2>
+            <p class="card-subtitle">Register each bot once, then use its private token on the bot host.</p>
+          </div>
+          <span class="mini-pill" id="bot-count-label">0 registered</span>
+        </div>
+        <div class="bot-registry-grid">
+          <div class="bot-list-wrap">
+            <label class="composer-field" for="owner-bot-select">
+              <span>Active bot</span>
+              <select id="owner-bot-select">
+                <option value="">Loading bots...</option>
+              </select>
+            </label>
+            <div class="bot-list" id="bot-list" aria-live="polite">
+              <p class="empty-state">No bots registered yet.</p>
+            </div>
+          </div>
+          <form class="register-bot-form" id="register-bot-form">
+            <div class="form-heading">Register a bot</div>
+            <label class="composer-field" for="register-bot-id">
+              <span>Bot ID</span>
+              <input id="register-bot-id" name="botId" required pattern="[a-z0-9][a-z0-9_-]{2,48}" placeholder="kepler-production" />
+            </label>
+            <label class="composer-field" for="register-bot-name">
+              <span>Display name</span>
+              <input id="register-bot-name" name="name" required placeholder="Kepler Production" />
+            </label>
+            <button class="owner-action primary" type="submit">Register bot</button>
+            <div class="bot-token" id="bot-token" hidden aria-live="polite"></div>
+          </form>
+        </div>
+      </section>
+
       <div class="owner-grid">
         <div class="card action-card">
           <div class="card-header-row">

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { getDb } = require('./utils/db');
 const { getSession } = require('./utils/auth');
+const { getSession, hasPermission } = require('./utils/auth');
 
 function json(statusCode, body) {
   return {
@@ -11,7 +12,7 @@ function json(statusCode, body) {
 }
 
 function isOwner(event) {
-  return getSession(event)?.role === 'owner';
+  return ['owner', 'admin'].includes(getSession(event)?.role);
 }
 
 function createBotSecret() {
@@ -23,19 +24,21 @@ function hashSecret(secret) {
 }
 
 exports.handler = async (event) => {
-  if (!['GET', 'POST', 'DELETE'].includes(event.httpMethod)) {
+  if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(event.httpMethod)) {
     return json(405, { error: 'Method Not Allowed' });
   }
-  if (!isOwner(event)) return json(401, { error: 'Owner authentication required' });
+  const session = getSession(event);
+  const requiredPermission = { GET: 'bot.read', POST: 'bot.register', PATCH: 'bot.approve', DELETE: 'bot.delete' }[event.httpMethod];
+  if (!hasPermission(session, requiredPermission)) return json(403, { error: `${requiredPermission} permission required` });
 
   try {
     const bots = (await getDb()).collection('bots');
-    const session = getSession(event);
     await bots.createIndex({ botId: 1 }, { unique: true });
 
     if (event.httpMethod === 'GET') {
+      const filter = session.role === 'owner' || session.permissions?.includes('*') ? {} : { ownerIds: session.userId };
       const records = await bots.find(
-        { ownerIds: session.userId },
+        filter,
         { projection: { _id: 0, botId: 1, name: 1, status: 1, guildIds: 1, createdAt: 1, lastSeenAt: 1 } }
       ).sort({ name: 1 }).toArray();
       return json(200, { bots: records });
@@ -46,6 +49,18 @@ exports.handler = async (event) => {
       payload = event.body ? JSON.parse(event.body) : {};
     } catch {
       return json(400, { error: 'Invalid JSON' });
+    }
+
+    if (event.httpMethod === 'PATCH') {
+      if (!['owner', 'admin'].includes(session.role) || !payload.botId || !['active', 'denied'].includes(payload.status)) {
+        return json(400, { error: 'botId and status active or denied are required' });
+      }
+      const result = await bots.updateOne(
+        { botId: payload.botId },
+        { $set: { status: payload.status, reviewedBy: session.userId, reviewedAt: new Date(), updatedAt: new Date() } }
+      );
+      if (!result.matchedCount) return json(404, { error: 'Bot not found' });
+      return json(200, { ok: true, botId: payload.botId, status: payload.status });
     }
 
     if (event.httpMethod === 'POST') {

@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const loginButton = document.querySelector('.btn-login');
   const ownerPage = document.body.dataset.page === 'owner';
+  let sessionRole = null;
 
   async function loadSession() {
     try {
@@ -19,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
           loginButton.textContent = data.user?.globalName || data.user?.username || 'Signed in';
           loginButton.dataset.authenticated = 'true';
         }
+        sessionRole = data.user?.role || null;
+        window.dispatchEvent(new Event('sns-session-loaded'));
         return true;
       }
       if (ownerPage && response.status === 401) {
@@ -150,6 +153,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const incidentFeed = document.getElementById('incident-feed-list');
     const refreshButton = document.querySelector('[data-refresh-panel="true"]');
     const refreshTime = document.getElementById('owner-refresh-time');
+    const botSelect = document.getElementById('owner-bot-select');
+    const botList = document.getElementById('bot-list');
+    const botCountLabel = document.getElementById('bot-count-label');
+    const registerBotForm = document.getElementById('register-bot-form');
+    const botToken = document.getElementById('bot-token');
 
     const STORAGE_KEY = 'sns-owner-panel-state';
     const getOwnerState = () => {
@@ -227,6 +235,40 @@ document.addEventListener('DOMContentLoaded', () => {
       if (refreshTime) refreshTime.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
     };
 
+    const escapeHtml = (value) => String(value).replace(/[&<>'"]/g, (character) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;',
+    }[character]));
+
+    const loadBots = async () => {
+      if (!botSelect || !botList) return;
+      try {
+        const response = await fetch('/api/bots', { credentials: 'same-origin' });
+        if (response.status === 401) {
+          botSelect.innerHTML = '<option value="">Sign in to load bots</option>';
+          botList.innerHTML = '<p class="empty-state">Sign in with Discord to manage registered bots.</p>';
+          return;
+        }
+        if (!response.ok) throw new Error('Failed to load bots');
+        const data = await response.json();
+        const bots = data.bots || [];
+        botSelect.innerHTML = bots.length
+          ? bots.map((bot) => `<option value="${escapeHtml(bot.botId)}">${escapeHtml(bot.name)}</option>`).join('')
+          : '<option value="">No bots registered</option>';
+        botList.innerHTML = bots.length
+          ? bots.map((bot) => `<div class="bot-list-item"><div><strong>${escapeHtml(bot.name)}</strong><span class="bot-id">${escapeHtml(bot.botId)}</span></div><div class="bot-list-meta"><span>${escapeHtml(bot.status || 'pending')}</span>${['owner', 'admin'].includes(sessionRole) && bot.status === 'pending' ? `<button type="button" class="bot-review approve" data-bot-review="active" data-bot-id="${escapeHtml(bot.botId)}">Approve</button><button type="button" class="bot-review deny" data-bot-review="denied" data-bot-id="${escapeHtml(bot.botId)}">Deny</button>` : ''}</div></div>`).join('')
+          : '<p class="empty-state">No bots registered yet.</p>';
+        if (botCountLabel) botCountLabel.textContent = `${bots.length} registered`;
+      } catch (error) {
+        console.warn('Bot registry unavailable:', error);
+        botSelect.innerHTML = '<option value="">Registry unavailable</option>';
+        botList.innerHTML = '<p class="empty-state">The bot registry could not be reached.</p>';
+      }
+    };
+
     const updateIncidentList = (message) => {
       const state = getOwnerState();
       const updated = [message, ...(state.incidents || [])].slice(0, 6);
@@ -296,11 +338,78 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    if (registerBotForm) {
+      registerBotForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const submitButton = registerBotForm.querySelector('button[type="submit"]');
+        const formData = new FormData(registerBotForm);
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = 'Registering...';
+        }
+        if (botToken) botToken.hidden = true;
+
+        try {
+          const response = await fetch('/api/bots', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              botId: formData.get('botId'),
+              name: formData.get('name'),
+            }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Bot registration failed');
+          if (botToken) {
+            botToken.textContent = `Bot token (copy it to Railway now; it will not be shown again): ${data.secret}`;
+            botToken.hidden = false;
+          }
+          registerBotForm.reset();
+          setFeedback(`${data.bot.name} registered successfully.`, 'success');
+          await loadBots();
+        } catch (error) {
+          setFeedback(error.message, 'warning');
+        } finally {
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Register bot';
+          }
+        }
+      });
+    }
+
+    if (botList) {
+      botList.addEventListener('click', async (event) => {
+        const reviewButton = event.target.closest('[data-bot-review]');
+        if (!reviewButton) return;
+        reviewButton.disabled = true;
+        try {
+          const response = await fetch('/api/bots', {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ botId: reviewButton.dataset.botId, status: reviewButton.dataset.botReview }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Review action failed');
+          setFeedback(`${reviewButton.dataset.botId} marked ${data.status}.`, data.status === 'active' ? 'success' : 'warning');
+          await loadBots();
+        } catch (error) {
+          setFeedback(error.message, 'warning');
+          reviewButton.disabled = false;
+        }
+      });
+    }
+
+    window.addEventListener('sns-session-loaded', loadBots);
+
     if (refreshButton) {
       refreshButton.addEventListener('click', async () => {
         refreshButton.disabled = true;
         refreshButton.textContent = 'Refreshing...';
         await loadStats();
+        await loadBots();
         markRefreshed();
         refreshButton.disabled = false;
         refreshButton.textContent = 'Refresh data';
@@ -309,6 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     applyOwnerState();
+    loadBots();
   }
 
   loadSession();
