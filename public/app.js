@@ -26,7 +26,18 @@ document.addEventListener('DOMContentLoaded', () => {
         window.dispatchEvent(new Event('sns-session-loaded'));
         return true;
       }
-      if (ownerPage && response.status === 401) {
+      if (ownerPage && (response.status === 401 || response.status === 403)) {
+        const authResult = new URLSearchParams(window.location.search).get('auth');
+        if (authResult === 'not-approved') {
+          document.body.classList.add('auth-denied');
+          const ownerFeedback = document.getElementById('owner-feedback');
+          if (ownerFeedback) ownerFeedback.textContent = 'Your Discord account is not approved for owner access.';
+          return false;
+        }
+        window.location.replace('/api/auth/discord');
+        return false;
+      }
+      if (ownerPage) {
         document.querySelectorAll('[data-owner-action], [data-send-notice="true"], [data-save-template="true"], [data-preview-notice="true"]').forEach((control) => {
           control.disabled = true;
         });
