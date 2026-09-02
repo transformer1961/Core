@@ -22,6 +22,12 @@ SNS Core is a bot-operations and monitoring platform for Discord bots and guild 
 Create a local .env file or set these variables in Netlify:
 
 - BOT_WEBHOOK_SECRET
+- SNS_ADMIN_KEY
+- SESSION_SECRET
+- DISCORD_CLIENT_ID
+- DISCORD_CLIENT_SECRET
+- DISCORD_REDIRECT_URI
+- SNS_OWNER_IDS (or SNS_ALLOWED_GUILD_IDS)
 - MONGODB_URI
 - MONGODB_DB_NAME
 
@@ -33,6 +39,30 @@ See .env.example for values.
   - Returns aggregate public health data only
 - POST /api/webhooks/bot-event
   - Accepts signed bot heartbeats and events
+- POST /api/bot/commands
+  - Queues an owner command using the private `x-sns-admin-key` header
+- GET /api/bot/commands
+  - Lets a bot claim its next command using `x-sns-bot-id` and an HMAC signature
+- PATCH /api/bot/commands
+  - Lets a bot report `running`, `completed`, or `failed` for a claimed command
+- GET /api/bots
+  - Lists bots registered to the signed-in owner
+- POST /api/bots
+  - Registers a bot and returns its secret once
+- DELETE /api/bots
+  - Removes a bot from the signed-in owner's registry
+- GET /api/auth/discord
+  - Starts Discord OAuth sign-in
+- GET /api/auth/callback
+  - Completes OAuth and creates the owner session
+- GET /api/auth/me
+  - Returns the current signed-in owner session
+- GET /api/auth/logout
+  - Clears the owner session
+
+### Discord OAuth setup
+
+Create a Discord application and add the exact `DISCORD_REDIRECT_URI` value to the application's OAuth2 redirect URLs. Add your Discord user ID to `SNS_OWNER_IDS`, or add guild IDs to `SNS_ALLOWED_GUILD_IDS` and sign in as their owner. Keep `DISCORD_CLIENT_SECRET`, `SESSION_SECRET`, `SNS_ADMIN_KEY`, and `BOT_WEBHOOK_SECRET` in Netlify environment variables only.
 
 ## Bot integration contract
 
@@ -60,6 +90,16 @@ Each connected bot should send a signed POST payload with an x-sns-signature hea
   "message": "Kepler Protocol activated for your server.",
   "sentBy": "system"
 }
+
+### Command lifecycle
+
+SNS Core queues commands for a specific `botId`; the bot connector claims one command at a time, executes it through the bot host supervisor, and reports the result. Commands expire after five minutes so an offline bot cannot execute an old shutdown or restart request when it returns.
+
+The initial queue uses `SNS_ADMIN_KEY` for server-side owner integration and `BOT_WEBHOOK_SECRET` for the bot transport. Do not expose either value in browser JavaScript. Discord OAuth and per-bot credential storage should be added before production owner access.
+
+### Bot registration
+
+After signing in, an owner can register a bot with `POST /api/bots` using a lowercase `botId` and display `name`. SNS Core stores a SHA-256 hash of the generated secret and returns the raw secret only in the registration response. Store that secret in the bot's Railway variables; it cannot be recovered from SNS Core.
 
 ## Local development
 

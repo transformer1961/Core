@@ -14,3 +14,33 @@
   from = "/api/webhooks/bot-event"
   to = "/.netlify/functions/bot-event-webhook"
   status = 200
+
+[[redirects]]
+  from = "/api/bot/commands"
+  to = "/.netlify/functions/bot-commands"
+  status = 200
+
+[[redirects]]
+  from = "/api/bots"
+  to = "/.netlify/functions/bot-registry"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/discord"
+  to = "/.netlify/functions/auth-discord"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/callback"
+  to = "/.netlify/functions/auth-callback"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/me"
+  to = "/.netlify/functions/auth-me"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/logout"
+  to = "/.netlify/functions/auth-logout"
+  status = 200

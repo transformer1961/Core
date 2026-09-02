@@ -7,6 +7,39 @@ document.addEventListener('DOMContentLoaded', () => {
     link.classList.toggle('active', isActive);
   });
 
+  const loginButton = document.querySelector('.btn-login');
+  const ownerPage = document.body.dataset.page === 'owner';
+
+  async function loadSession() {
+    try {
+      const response = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      if (response.ok) {
+        const data = await response.json();
+        if (loginButton) {
+          loginButton.textContent = data.user?.globalName || data.user?.username || 'Signed in';
+          loginButton.dataset.authenticated = 'true';
+        }
+        return true;
+      }
+      if (ownerPage && response.status === 401) {
+        document.querySelectorAll('[data-owner-action], [data-send-notice="true"], [data-save-template="true"], [data-preview-notice="true"]').forEach((control) => {
+          control.disabled = true;
+        });
+        const ownerFeedback = document.getElementById('owner-feedback');
+        if (ownerFeedback) ownerFeedback.textContent = 'Sign in with Discord to use owner controls.';
+      }
+    } catch {
+      // Static previews can run without the Netlify auth functions.
+    }
+    return false;
+  }
+
+  if (loginButton) {
+    loginButton.addEventListener('click', () => {
+      window.location.href = loginButton.dataset.authenticated === 'true' ? '/api/auth/logout' : '/api/auth/discord';
+    });
+  }
+
   const statusNodes = {
     status: document.getElementById('stat-status'),
     guilds: document.getElementById('stat-guilds'),
@@ -278,5 +311,6 @@ document.addEventListener('DOMContentLoaded', () => {
     applyOwnerState();
   }
 
+  loadSession();
   loadStats();
 });

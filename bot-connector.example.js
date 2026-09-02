@@ -36,7 +36,36 @@ async function sendEvent({ url, secret, payload }) {
   return { ok: response.ok, status: response.status, body: await response.text() };
 }
 
-module.exports = { sendHeartbeat, sendEvent };
+async function claimCommand({ url, botId, token, secret }) {
+  const response = await fetch(url, {
+    headers: {
+      'x-sns-bot-id': botId,
+      'x-sns-bot-token': token,
+      'x-sns-signature': signPayload('', secret),
+    },
+  });
+
+  return { ok: response.ok, status: response.status, body: await response.json() };
+}
+
+async function reportCommand({ url, botId, token, secret, commandId, status, result, error }) {
+  const payload = { commandId, status, result, error };
+  const raw = JSON.stringify(payload);
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-sns-bot-id': botId,
+      'x-sns-bot-token': token,
+      'x-sns-signature': signPayload(raw, secret),
+    },
+    body: raw,
+  });
+
+  return { ok: response.ok, status: response.status, body: await response.text() };
+}
+
+module.exports = { sendHeartbeat, sendEvent, claimCommand, reportCommand };
 
 // Example usage:
 // const { sendHeartbeat } = require('./bot-connector.example');
@@ -45,6 +74,7 @@ module.exports = { sendHeartbeat, sendEvent };
 //   secret: process.env.BOT_WEBHOOK_SECRET,
 //   payload: {
 //     type: 'heartbeat',
+//     botId: 'kepler-production',
 //     online: true,
 //     guilds: 12,
 //     uptimeSeconds: 600,

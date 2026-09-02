@@ -74,10 +74,12 @@ exports.handler = async (event) => {
     const db = await getDb();
 
     if (payload.type === 'heartbeat') {
+      const botId = payload.botId || event.headers['x-sns-bot-id'] || 'global';
       await db.collection('bot_status').updateOne(
-        { _id: 'global' },
+        { _id: botId },
         {
           $set: {
+            botId,
             online: payload.online ?? true,
             guilds: payload.guilds ?? 0,
             uptimeSeconds: payload.uptimeSeconds ?? 0,
