@@ -1,7 +1,8 @@
 const { getDb } = require('./utils/db');
 const { getSession } = require('./utils/auth');
+const { allowRateLimit, getClientKey, writeAudit } = require('./utils/security');
 
-const allowedPermissions = new Set(['bot.read', 'bot.register', 'bot.approve', 'bot.command', 'bot.delete']);
+const allowedPermissions = new Set(['bot.read', 'bot.register', 'bot.approve', 'bot.command', 'bot.delete', 'system.control']);
 
 function json(statusCode, body) {
   return { statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) };
@@ -23,8 +24,10 @@ exports.handler = async (event) => {
   }
 
   try {
-    const access = (await getDb()).collection('access_controls');
+    const db = await getDb();
+    const access = db.collection('access_controls');
     const session = getSession(event);
+    if (!await allowRateLimit(db, `access:${getClientKey(event, session.userId)}`, 30, 60 * 1000)) return json(429, { error: 'Too many access-control requests' });
     await access.createIndex({ userId: 1 }, { unique: true });
 
     if (event.httpMethod === 'GET') {
@@ -38,6 +41,7 @@ exports.handler = async (event) => {
 
     if (event.httpMethod === 'DELETE') {
       await access.deleteOne({ userId: payload.userId });
+      await writeAudit(db, { actorId: session.userId, action: 'access.revoked', targetType: 'user', targetId: payload.userId });
       return json(200, { ok: true, userId: payload.userId, revoked: true });
     }
 
@@ -48,11 +52,13 @@ exports.handler = async (event) => {
       userId: payload.userId,
       role: payload.role === 'viewer' ? 'viewer' : 'admin',
       permissions,
+      guildIds: Array.isArray(payload.guildIds) ? [...new Set(payload.guildIds.filter((id) => /^\d{5,25}$/.test(id)))] : [],
       enabled: payload.enabled !== false,
       updatedAt: new Date(),
       updatedBy: session.userId,
     };
     await access.updateOne({ userId: record.userId }, { $set: record, $setOnInsert: { createdAt: new Date() } }, { upsert: true });
+    await writeAudit(db, { actorId: session.userId, action: 'access.updated', targetType: 'user', targetId: record.userId, details: { permissions: record.permissions, guildIds: record.guildIds, enabled: record.enabled } });
     return json(200, { ok: true, permission: { userId: record.userId, role: record.role, permissions: record.permissions, enabled: record.enabled } });
   } catch (error) {
     console.error('access-control error:', error);

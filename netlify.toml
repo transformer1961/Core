@@ -36,6 +36,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/security"
+  to = "/.netlify/functions/security-controls"
+  status = 200
+
+[[redirects]]
+  from = "/api/bot/command-history"
+  to = "/.netlify/functions/command-history"
+  status = 200
+
+[[redirects]]
   from = "/api/auth/discord"
   to = "/.netlify/functions/auth-discord"
   status = 200

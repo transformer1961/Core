@@ -154,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const escalationLabel = document.getElementById('escalation-status-label');
     const incidentFeed = document.getElementById('incident-feed-list');
     const refreshButton = document.querySelector('[data-refresh-panel="true"]');
+    const globalDisableButton = document.querySelector('[data-global-disable="true"]');
     const refreshTime = document.getElementById('owner-refresh-time');
     const botSelect = document.getElementById('owner-bot-select');
     const botList = document.getElementById('bot-list');
@@ -163,6 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const accessPanel = document.getElementById('access-panel');
     const accessForm = document.getElementById('access-form');
     const accessList = document.getElementById('access-list');
+    const commandHistoryList = document.getElementById('command-history-list');
 
     const STORAGE_KEY = 'sns-owner-panel-state';
     const getOwnerState = () => {
@@ -248,11 +250,30 @@ document.addEventListener('DOMContentLoaded', () => {
       '"': '&quot;',
     }[character]));
 
+    const queueCommand = async (command, requiresConfirmation = false) => {
+      const botId = botSelect?.value;
+      if (!botId) {
+        setFeedback('Select or register an approved bot before sending commands.', 'warning');
+        return;
+      }
+      if (requiresConfirmation && !window.confirm(`Confirm ${command.replace('_', ' ')} for ${botId}?`)) return;
+      const response = await fetch('/api/bot/commands', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botId, command, confirmed: requiresConfirmation, reason: 'Owner Panel action' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Command could not be queued');
+      setFeedback(`${command.replace('_', ' ')} queued for ${botId}. Command ID: ${data.commandId}`, 'success');
+      updateIncidentList(`${command.replace('_', ' ')} queued for ${botId}`);
+    };
+
     const loadBots = async () => {
       if (!botSelect || !botList) return;
       try {
         const response = await fetch('/api/bots', { credentials: 'same-origin' });
-        if (response.status === 401) {
+        if (response.status === 401 || response.status === 403) {
           botSelect.innerHTML = '<option value="">Sign in to load bots</option>';
           botList.innerHTML = '<p class="empty-state">Sign in with Discord to manage registered bots.</p>';
           return;
@@ -264,7 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ? bots.map((bot) => `<option value="${escapeHtml(bot.botId)}">${escapeHtml(bot.name)}</option>`).join('')
           : '<option value="">No bots registered</option>';
         botList.innerHTML = bots.length
-          ? bots.map((bot) => `<div class="bot-list-item"><div><strong>${escapeHtml(bot.name)}</strong><span class="bot-id">${escapeHtml(bot.botId)}</span></div><div class="bot-list-meta"><span>${escapeHtml(bot.status || 'pending')}</span>${['owner', 'admin'].includes(sessionRole) && bot.status === 'pending' ? `<button type="button" class="bot-review approve" data-bot-review="active" data-bot-id="${escapeHtml(bot.botId)}">Approve</button><button type="button" class="bot-review deny" data-bot-review="denied" data-bot-id="${escapeHtml(bot.botId)}">Deny</button>` : ''}</div></div>`).join('')
+          ? bots.map((bot) => `<div class="bot-list-item"><div><strong>${escapeHtml(bot.name)}</strong><span class="bot-id">${escapeHtml(bot.botId)}</span></div><div class="bot-list-meta"><span>${escapeHtml(bot.status || 'pending')}</span>${['owner', 'admin'].includes(sessionRole) && bot.status === 'pending' ? `<button type="button" class="bot-review approve" data-bot-review="active" data-bot-id="${escapeHtml(bot.botId)}">Approve</button><button type="button" class="bot-review deny" data-bot-review="denied" data-bot-id="${escapeHtml(bot.botId)}">Deny</button>` : ''}${sessionRole === 'owner' && bot.status === 'active' ? `<button type="button" class="bot-review" data-bot-credential="rotate" data-bot-id="${escapeHtml(bot.botId)}">Rotate</button><button type="button" class="bot-review deny" data-bot-credential="revoke" data-bot-id="${escapeHtml(bot.botId)}">Revoke</button>` : ''}</div></div>`).join('')
           : '<p class="empty-state">No bots registered yet.</p>';
         if (botCountLabel) botCountLabel.textContent = `${bots.length} registered`;
       } catch (error) {
@@ -289,6 +310,18 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
+    const loadCommandHistory = async () => {
+      if (!commandHistoryList) return;
+      try {
+        const response = await fetch('/api/bot/command-history', { credentials: 'same-origin' });
+        if (!response.ok) throw new Error('Failed to load command history');
+        const data = await response.json();
+        commandHistoryList.innerHTML = (data.history || []).map((entry) => `<div class="command-history-row"><strong>${escapeHtml(entry.botId || 'Unknown bot')}</strong><span>${escapeHtml(entry.status)}</span><span>${escapeHtml(entry.commandId || '')}</span></div>`).join('') || '<p class="empty-state">No command history yet.</p>';
+      } catch (error) {
+        commandHistoryList.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`;
+      }
+    };
+
     const updateIncidentList = (message) => {
       const state = getOwnerState();
       const updated = [message, ...(state.incidents || [])].slice(0, 6);
@@ -302,6 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const state = getOwnerState();
 
         if (action === 'arm-kepler') {
+          queueCommand('enable').catch((error) => setFeedback(error.message, 'warning'));
           state.kepler = 'Armed';
           saveOwnerState(state);
           setFeedback('Kepler armed and waiting for escalation triggers.', 'success');
@@ -309,6 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (action === 'trigger-lockdown') {
+          queueCommand('trigger_lockdown', true).catch((error) => setFeedback(error.message, 'warning'));
           state.kepler = 'Triggered';
           state.watchdog = 'Alerting';
           state.moderation = 'Locked';
@@ -319,8 +354,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (action === 'restart-bot') {
+          queueCommand('restart').catch((error) => setFeedback(error.message, 'warning'));
           setFeedback('Bot restart requested. Service will be refreshed shortly.', 'neutral');
           updateIncidentList('Bot restart command queued');
+        }
+
+        if (action === 'shutdown-bot') {
+          queueCommand('shutdown', true).catch((error) => setFeedback(error.message, 'warning'));
         }
 
         if (action === 'deploy-update') {
@@ -409,7 +449,13 @@ document.addEventListener('DOMContentLoaded', () => {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: formData.get('userId'), role: 'admin', permissions, enabled: true }),
+            body: JSON.stringify({
+              userId: formData.get('userId'),
+              role: 'admin',
+              permissions,
+              guildIds: String(formData.get('guildIds') || '').split(',').map((id) => id.trim()).filter(Boolean),
+              enabled: true,
+            }),
           });
           const data = await response.json();
           if (!response.ok) throw new Error(data.error || 'Could not save permissions');
@@ -424,6 +470,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (botList) {
       botList.addEventListener('click', async (event) => {
+        const credentialButton = event.target.closest('[data-bot-credential]');
+        if (credentialButton) {
+          if (!window.confirm(`${credentialButton.dataset.botCredential === 'revoke' ? 'Revoke' : 'Rotate'} credentials for ${credentialButton.dataset.botId}?`)) return;
+          credentialButton.disabled = true;
+          try {
+            const response = await fetch('/api/bots', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botId: credentialButton.dataset.botId, action: credentialButton.dataset.botCredential }) });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Credential action failed');
+            if (data.secret) {
+              if (botToken) { botToken.textContent = `New bot token (copy it to Railway now): ${data.secret}`; botToken.hidden = false; }
+            }
+            setFeedback(`${credentialButton.dataset.botId} credentials ${credentialButton.dataset.botCredential}d.`, credentialButton.dataset.botCredential === 'revoke' ? 'warning' : 'success');
+            await loadBots();
+          } catch (error) {
+            setFeedback(error.message, 'warning');
+            credentialButton.disabled = false;
+          }
+          return;
+        }
         const reviewButton = event.target.closest('[data-bot-review]');
         if (!reviewButton) return;
         reviewButton.disabled = true;
@@ -453,6 +518,7 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshButton.textContent = 'Refreshing...';
         await loadStats();
         await loadBots();
+        await loadCommandHistory();
         markRefreshed();
         refreshButton.disabled = false;
         refreshButton.textContent = 'Refresh data';
@@ -460,9 +526,41 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    if (globalDisableButton) {
+      fetch('/api/security', { credentials: 'same-origin' })
+        .then((response) => response.ok ? response.json() : null)
+        .then((data) => {
+          if (!data) return;
+          globalDisableButton.dataset.disabled = String(data.disabled);
+          globalDisableButton.textContent = data.disabled ? 'Enable commands' : 'Emergency disable';
+        })
+        .catch(() => {});
+
+      globalDisableButton.addEventListener('click', async () => {
+        const disabling = globalDisableButton.dataset.disabled !== 'true';
+        if (!window.confirm(`${disabling ? 'Disable' : 'Enable'} all bot command delivery globally?`)) return;
+        try {
+          const response = await fetch('/api/security', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ disabled: disabling }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Security control failed');
+          globalDisableButton.dataset.disabled = String(data.disabled);
+          globalDisableButton.textContent = data.disabled ? 'Enable commands' : 'Emergency disable';
+          setFeedback(data.disabled ? 'Emergency disable is active. Bots cannot claim commands.' : 'Global command delivery restored.', data.disabled ? 'warning' : 'success');
+        } catch (error) {
+          setFeedback(error.message, 'warning');
+        }
+      });
+    }
+
     applyOwnerState();
     loadBots();
     loadAccess();
+    loadCommandHistory();
   }
 
   loadSession();

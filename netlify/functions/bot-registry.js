@@ -1,6 +1,6 @@
-const crypto = require('crypto');
 const { getDb } = require('./utils/db');
 const { getSession, hasPermission } = require('./utils/auth');
+const { allowRateLimit, createSecret, getClientKey, hashSecret, writeAudit } = require('./utils/security');
 
 function json(statusCode, body) {
   return {
@@ -14,14 +14,6 @@ function isOwner(event) {
   return ['owner', 'admin'].includes(getSession(event)?.role);
 }
 
-function createBotSecret() {
-  return crypto.randomBytes(32).toString('base64url');
-}
-
-function hashSecret(secret) {
-  return crypto.createHash('sha256').update(secret).digest('hex');
-}
-
 exports.handler = async (event) => {
   if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(event.httpMethod)) {
     return json(405, { error: 'Method Not Allowed' });
@@ -31,7 +23,9 @@ exports.handler = async (event) => {
   if (!hasPermission(session, requiredPermission)) return json(403, { error: `${requiredPermission} permission required` });
 
   try {
-    const bots = (await getDb()).collection('bots');
+    const db = await getDb();
+    const bots = db.collection('bots');
+    if (!await allowRateLimit(db, `registry:${getClientKey(event, session.userId)}`, 30, 60 * 1000)) return json(429, { error: 'Too many bot registry requests' });
     await bots.createIndex({ botId: 1 }, { unique: true });
 
     if (event.httpMethod === 'GET') {
@@ -51,14 +45,30 @@ exports.handler = async (event) => {
     }
 
     if (event.httpMethod === 'PATCH') {
-      if (!['owner', 'admin'].includes(session.role) || !payload.botId || !['active', 'denied'].includes(payload.status)) {
-        return json(400, { error: 'botId and status active or denied are required' });
+      if (!payload.botId) return json(400, { error: 'botId is required' });
+      if (['rotate', 'revoke'].includes(payload.action)) {
+        if (!hasPermission(session, 'bot.delete')) return json(403, { error: 'bot.delete permission required for credential changes' });
+        if (payload.action === 'revoke') {
+          const revoked = await bots.updateOne({ botId: payload.botId }, { $set: { status: 'revoked', revokedAt: new Date(), updatedAt: new Date() }, $unset: { secretHash: '' } });
+          if (!revoked.matchedCount) return json(404, { error: 'Bot not found' });
+          await writeAudit(db, { actorId: session.userId, action: 'bot.revoked', targetType: 'bot', targetId: payload.botId });
+          return json(200, { ok: true, botId: payload.botId, status: 'revoked' });
+        }
+        const secret = createSecret();
+        const rotated = await bots.updateOne({ botId: payload.botId }, { $set: { secretHash: hashSecret(secret), status: 'pending', updatedAt: new Date(), rotatedAt: new Date() } });
+        if (!rotated.matchedCount) return json(404, { error: 'Bot not found' });
+        await writeAudit(db, { actorId: session.userId, action: 'bot.secret_rotated', targetType: 'bot', targetId: payload.botId });
+        return json(200, { ok: true, botId: payload.botId, status: 'pending', secret, warning: 'Store this new secret on the bot host. Approval is required again.' });
+      }
+      if (!['active', 'denied'].includes(payload.status)) {
+        return json(400, { error: 'status active or denied is required' });
       }
       const result = await bots.updateOne(
         { botId: payload.botId },
         { $set: { status: payload.status, reviewedBy: session.userId, reviewedAt: new Date(), updatedAt: new Date() } }
       );
       if (!result.matchedCount) return json(404, { error: 'Bot not found' });
+      await writeAudit(db, { actorId: session.userId, action: `bot.${payload.status === 'active' ? 'approved' : 'denied'}`, targetType: 'bot', targetId: payload.botId });
       return json(200, { ok: true, botId: payload.botId, status: payload.status });
     }
 
@@ -67,7 +77,7 @@ exports.handler = async (event) => {
         return json(400, { error: 'botId must be 3-49 lowercase characters and name is required' });
       }
 
-      const secret = createBotSecret();
+      const secret = createSecret();
       const record = {
         botId: payload.botId,
         name: payload.name.trim(),
@@ -86,6 +96,8 @@ exports.handler = async (event) => {
         throw error;
       }
 
+      await writeAudit(db, { actorId: session.userId, action: 'bot.registered', targetType: 'bot', targetId: record.botId, details: { name: record.name } });
+
       return json(201, {
         bot: { botId: record.botId, name: record.name, status: record.status },
         secret,
@@ -96,6 +108,7 @@ exports.handler = async (event) => {
     if (!payload.botId) return json(400, { error: 'botId is required' });
     const result = await bots.deleteOne({ botId: payload.botId, ownerIds: session.userId });
     if (!result.deletedCount) return json(404, { error: 'Bot not found' });
+    await writeAudit(db, { actorId: session.userId, action: 'bot.deleted', targetType: 'bot', targetId: payload.botId });
     return json(200, { ok: true, botId: payload.botId });
   } catch (error) {
     console.error('bot-registry error:', error);

@@ -73,8 +73,10 @@ function getSession(event) {
   return decryptSession(parseCookies(event)[sessionCookieName]);
 }
 
-function hasPermission(session, permission) {
-  return session?.role === 'owner' || session?.permissions?.includes('*') || session?.permissions?.includes(permission);
+function hasPermission(session, permission, guildId = null) {
+  if (session?.role === 'owner' || session?.permissions?.includes('*')) return true;
+  if (!session?.permissions?.includes(permission)) return false;
+  return !guildId || !session.guildIds?.length || session.guildIds.includes(guildId);
 }
 
 function cookie(name, value, maxAge) {
@@ -112,7 +114,7 @@ async function getAuthorization(userId, guilds = []) {
 
   const { getDb } = require('./db');
   const record = await (await getDb()).collection('access_controls').findOne({ userId, enabled: true });
-  return record ? { role: record.role, permissions: record.permissions || [] } : null;
+  return record ? { role: record.role, permissions: record.permissions || [], guildIds: record.guildIds || [] } : null;
 }
 
 async function getUserRole(userId, guilds = []) {

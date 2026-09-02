@@ -348,6 +348,15 @@ a { color: inherit; text-decoration: none; }
   background: rgba(232, 181, 107, 0.1);
 }
 
+.refresh-button.danger {
+  color: #f5b0a8;
+  border-color: rgba(235, 120, 105, 0.35);
+}
+
+.refresh-button.danger:hover {
+  background: rgba(235, 120, 105, 0.1);
+}
+
 .refresh-time {
   white-space: nowrap;
   text-transform: none;
@@ -506,6 +515,28 @@ a { color: inherit; text-decoration: none; }
 }
 
 .access-row strong { color: var(--text); }
+
+.command-history-panel {
+  margin-top: 24px;
+}
+
+.command-history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.command-history-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(100px, 0.45fr) 1fr;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.command-history-row strong { color: var(--text); }
 
 .owner-grid {
   display: grid;
@@ -1019,4 +1050,5 @@ a { color: inherit; text-decoration: none; }
   .bot-registry-grid { grid-template-columns: 1fr; }
   .access-form { grid-template-columns: 1fr; align-items: stretch; }
   .permission-options { padding-bottom: 0; }
+  .command-history-row { grid-template-columns: 1fr; gap: 4px; }
 }

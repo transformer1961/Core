@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { getDb } = require('./utils/db');
 const { getSession, hasPermission } = require('./utils/auth');
 const { authenticateBot, getHeader } = require('./utils/bot-auth');
+const { allowRateLimit, getClientKey, isGloballyDisabled, writeAudit } = require('./utils/security');
 
 const allowedCommands = new Set(['enable', 'disable', 'restart', 'shutdown', 'trigger_lockdown']);
 
@@ -46,13 +47,19 @@ exports.handler = async (event) => {
       if (!payload.botId || !allowedCommands.has(payload.command)) {
         return json(400, { error: 'botId and a supported command are required' });
       }
+      const session = getSession(event);
+      if (!hasPermission(session, 'bot.command', payload.guildId || null)) return json(403, { error: 'bot.command permission required for this guild' });
+      const db = await getDb();
+      if (!await allowRateLimit(db, `command:${getClientKey(event, session?.userId || 'admin-key')}`, 20, 60 * 1000)) return json(429, { error: 'Too many command requests' });
+      if (payload.confirmed !== true && ['shutdown', 'trigger_lockdown'].includes(payload.command)) return json(409, { error: 'Explicit confirmation is required for this command' });
 
-      const commands = (await getDb()).collection('commands');
+      const commands = db.collection('commands');
 
       const command = {
         commandId: crypto.randomUUID(),
         botId: payload.botId,
         command: payload.command,
+        guildId: payload.guildId || null,
         reason: payload.reason || null,
         requestedBy: payload.requestedBy || 'owner-panel',
         status: 'queued',
@@ -61,12 +68,15 @@ exports.handler = async (event) => {
         updatedAt: new Date(),
       };
       await commands.insertOne(command);
+      await db.collection('command_history').insertOne({ commandId: command.commandId, botId: command.botId, status: 'queued', createdAt: new Date(), actorId: session?.userId || 'admin-key' });
+      await writeAudit(db, { actorId: session?.userId || 'admin-key', action: 'command.queued', targetType: 'bot', targetId: command.botId, details: { commandId: command.commandId, command: command.command, guildId: command.guildId, reason: command.reason } });
       return json(202, { ok: true, commandId: command.commandId, status: command.status });
     }
 
     if (!await authenticateBot(event, rawBody)) return json(401, { error: 'Bot authentication required' });
     const botId = getHeader(event, 'x-sns-bot-id');
-  const commands = (await getDb()).collection('commands');
+    const db = await getDb();
+    const commands = db.collection('commands');
 
     if (event.httpMethod === 'GET') {
       const command = await commands.findOneAndUpdate(
@@ -82,6 +92,7 @@ exports.handler = async (event) => {
       );
 
       if (!command) return json(200, { command: null });
+      await db.collection('command_history').insertOne({ commandId: command.commandId, botId, status: 'received', createdAt: new Date() });
       return json(200, { command });
     }
 
@@ -104,6 +115,8 @@ exports.handler = async (event) => {
     );
 
     if (!result) return json(404, { error: 'Command not found for this bot' });
+    await db.collection('command_history').insertOne({ commandId: payload.commandId, botId, status: payload.status, result: payload.result || null, error: payload.error || null, createdAt: new Date() });
+    await writeAudit(db, { actorId: botId, action: `command.${payload.status}`, targetType: 'command', targetId: payload.commandId, details: { result: payload.result || null, error: payload.error || null } });
     return json(200, { ok: true, commandId: payload.commandId, status: result.status });
   } catch (error) {
     console.error('bot-commands error:', error);

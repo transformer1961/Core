@@ -16,6 +16,7 @@ exports.handler = async (event) => {
         avatar: session.avatar,
         role: session.role,
         permissions: session.permissions || [],
+        guildIds: session.guildIds || [],
       },
     }),
   };

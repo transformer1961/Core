@@ -46,6 +46,7 @@
             </select>
           </label>
           <button class="refresh-button" type="button" data-refresh-panel="true">Refresh data</button>
+          <button class="refresh-button danger" type="button" data-global-disable="true">Emergency disable</button>
           <span class="refresh-time" id="owner-refresh-time" aria-live="polite">Updated just now</span>
         </div>
       </div>
@@ -99,12 +100,17 @@
             <span>Discord user ID</span>
             <input id="access-user-id" name="userId" required inputmode="numeric" pattern="[0-9]{5,25}" placeholder="123456789012345678" />
           </label>
+          <label class="composer-field" for="access-guild-ids">
+            <span>Guild scope IDs</span>
+            <input id="access-guild-ids" name="guildIds" placeholder="Optional comma-separated IDs" />
+          </label>
           <div class="permission-options" aria-label="Permissions">
             <label><input type="checkbox" name="permission" value="bot.read" /> View bots</label>
             <label><input type="checkbox" name="permission" value="bot.register" /> Register bots</label>
             <label><input type="checkbox" name="permission" value="bot.approve" /> Approve bots</label>
             <label><input type="checkbox" name="permission" value="bot.command" /> Send commands</label>
             <label><input type="checkbox" name="permission" value="bot.delete" /> Delete bots</label>
+            <label><input type="checkbox" name="permission" value="system.control" /> Emergency controls</label>
           </div>
           <button class="owner-action primary" type="submit">Save permissions</button>
         </form>
@@ -124,6 +130,7 @@
             <button class="owner-action primary" data-owner-action="arm-kepler">Arm Kepler</button>
             <button class="owner-action warning" data-owner-action="trigger-lockdown">Trigger lockdown</button>
             <button class="owner-action" data-owner-action="restart-bot">Restart bot</button>
+            <button class="owner-action warning" data-owner-action="shutdown-bot">Shutdown bot</button>
             <button class="owner-action" data-owner-action="deploy-update">Deploy update</button>
           </div>
         </div>
@@ -183,6 +190,19 @@
           </ul>
         </div>
       </div>
+
+      <section class="card command-history-panel" aria-labelledby="command-history-title">
+        <div class="card-header-row">
+          <div>
+            <h2 id="command-history-title">Command history</h2>
+            <p class="card-subtitle">A trace of owner requests and bot acknowledgements.</p>
+          </div>
+          <span class="mini-pill">Last 100</span>
+        </div>
+        <div class="command-history-list" id="command-history-list" aria-live="polite">
+          <p class="empty-state">Loading command history...</p>
+        </div>
+      </section>
 
       <div class="notification-panel card">
         <div class="card-header-row">

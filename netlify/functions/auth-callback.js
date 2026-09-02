@@ -46,6 +46,7 @@ exports.handler = async (event) => {
       avatar: user.avatar || null,
       role: authorization.role,
       permissions: authorization.permissions,
+      guildIds: authorization.guildIds || [],
     });
     return {
       statusCode: 302,

@@ -29,6 +29,7 @@ async function authenticateBot(event, rawBody) {
     secretHash: hashToken(token),
     status: 'active',
   });
+  if (bot && await require('./security').isGloballyDisabled(await getDb())) return null;
   return bot || null;
 }
 
