@@ -31,10 +31,32 @@
         <p>Control server protections, monitor incidents, and manage the operational state for your bot and guild environment.</p>
       </div>
 
+      <div class="owner-toolbar" aria-label="Panel controls">
+        <div>
+          <span class="toolbar-label">Active workspace</span>
+          <strong>SNS Core / Production</strong>
+        </div>
+        <div class="toolbar-controls">
+          <label class="toolbar-select" for="owner-scope">
+            <span class="sr-only">Workspace scope</span>
+            <select id="owner-scope">
+              <option>All protected guilds</option>
+              <option>Priority guilds</option>
+              <option>Manual review queue</option>
+            </select>
+          </label>
+          <button class="refresh-button" type="button" data-refresh-panel="true">Refresh data</button>
+          <span class="refresh-time" id="owner-refresh-time" aria-live="polite">Updated just now</span>
+        </div>
+      </div>
+
       <div class="owner-grid">
         <div class="card action-card">
           <div class="card-header-row">
-            <h2>Quick actions</h2>
+            <div>
+              <h2>Quick actions</h2>
+              <p class="card-subtitle">Changes apply to the active workspace.</p>
+            </div>
             <span class="panel-live">Active</span>
           </div>
           <div class="action-list">
@@ -47,6 +69,7 @@
 
         <div class="card metric-card">
           <h2>Server overview</h2>
+          <p class="card-subtitle">Current fleet health at a glance.</p>
           <div class="mini-grid">
             <div class="mini-stat">
               <span>Guilds</span>
@@ -71,16 +94,18 @@
       <div class="owner-grid lower-grid">
         <div class="card">
           <h2>Protection status</h2>
+          <p class="card-subtitle">Guardrails currently applied to the workspace.</p>
           <div class="table-list">
-            <div class="table-row"><span>Kepler</span><strong id="kepler-status-label">Armed</strong></div>
-            <div class="table-row"><span>Watchdog</span><strong id="watchdog-status-label">Online</strong></div>
-            <div class="table-row"><span>Auto moderation</span><strong id="moderation-status-label">Enabled</strong></div>
-            <div class="table-row"><span>Escalations</span><strong id="escalation-status-label">Queued</strong></div>
+            <div class="table-row"><span>Kepler</span><strong class="status-value success" id="kepler-status-label">Armed</strong></div>
+            <div class="table-row"><span>Watchdog</span><strong class="status-value success" id="watchdog-status-label">Online</strong></div>
+            <div class="table-row"><span>Auto moderation</span><strong class="status-value success" id="moderation-status-label">Enabled</strong></div>
+            <div class="table-row"><span>Escalations</span><strong class="status-value pending" id="escalation-status-label">Queued</strong></div>
           </div>
         </div>
 
         <div class="card">
           <h2>Incident feed</h2>
+          <p class="card-subtitle">Recent activity across protected guilds.</p>
           <ul class="incident-list" id="incident-feed-list">
             <li>
               <div class="incident-time">Now</div>
@@ -100,7 +125,10 @@
 
       <div class="notification-panel card">
         <div class="card-header-row">
-          <h2>Lockdown message / notifications</h2>
+          <div>
+            <h2>Lockdown message / notifications</h2>
+            <p class="card-subtitle">Prepare a broadcast before taking a high-impact action.</p>
+          </div>
           <span class="mini-pill">Broadcast</span>
         </div>
 

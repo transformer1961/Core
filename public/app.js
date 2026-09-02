@@ -115,6 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const moderationLabel = document.getElementById('moderation-status-label');
     const escalationLabel = document.getElementById('escalation-status-label');
     const incidentFeed = document.getElementById('incident-feed-list');
+    const refreshButton = document.querySelector('[data-refresh-panel="true"]');
+    const refreshTime = document.getElementById('owner-refresh-time');
 
     const STORAGE_KEY = 'sns-owner-panel-state';
     const getOwnerState = () => {
@@ -188,6 +190,10 @@ document.addEventListener('DOMContentLoaded', () => {
       feedback.className = `owner-feedback ${tone}`;
     };
 
+    const markRefreshed = () => {
+      if (refreshTime) refreshTime.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+    };
+
     const updateIncidentList = (message) => {
       const state = getOwnerState();
       const updated = [message, ...(state.incidents || [])].slice(0, 6);
@@ -254,6 +260,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (saveTemplateButton) {
       saveTemplateButton.addEventListener('click', () => {
         setFeedback('Current message saved as a reusable lockdown template.', 'success');
+      });
+    }
+
+    if (refreshButton) {
+      refreshButton.addEventListener('click', async () => {
+        refreshButton.disabled = true;
+        refreshButton.textContent = 'Refreshing...';
+        await loadStats();
+        markRefreshed();
+        refreshButton.disabled = false;
+        refreshButton.textContent = 'Refresh data';
+        setFeedback('Panel data refreshed.', 'success');
       });
     }
 
