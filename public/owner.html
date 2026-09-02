@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Owner Panel — SNS Core</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="owner">
+  <nav class="nav">
+    <div class="nav-brand">
+      <div class="nav-mark">S</div>
+      <div class="nav-name">SNS Core<span>by Sentinel Network Systems</span></div>
+    </div>
+    <div class="nav-links">
+      <a href="/" data-page="home">Home</a>
+      <a href="/features.html" data-page="features">Features</a>
+      <a href="/status.html" data-page="status">Status</a>
+      <a href="/owner.html" data-page="owner">Owner Panel</a>
+      <a href="/kepler.html" data-page="kepler">Kepler</a>
+      <a href="/docs.html" data-page="docs">Docs</a>
+    </div>
+    <button class="btn-login">Bot owner</button>
+  </nav>
+
+  <main>
+    <div class="page-shell owner-shell">
+      <div class="page-hero owner-hero">
+        <div class="eyebrow">Restricted access</div>
+        <h1>Owner Panel</h1>
+        <p>Control server protections, monitor incidents, and manage the operational state for your bot and guild environment.</p>
+      </div>
+
+      <div class="owner-grid">
+        <div class="card action-card">
+          <div class="card-header-row">
+            <h2>Quick actions</h2>
+            <span class="panel-live">Active</span>
+          </div>
+          <div class="action-list">
+            <button class="owner-action primary" data-owner-action="arm-kepler">Arm Kepler</button>
+            <button class="owner-action warning" data-owner-action="trigger-lockdown">Trigger lockdown</button>
+            <button class="owner-action" data-owner-action="restart-bot">Restart bot</button>
+            <button class="owner-action" data-owner-action="deploy-update">Deploy update</button>
+          </div>
+        </div>
+
+        <div class="card metric-card">
+          <h2>Server overview</h2>
+          <div class="mini-grid">
+            <div class="mini-stat">
+              <span>Guilds</span>
+              <strong id="owner-guild-count">12</strong>
+            </div>
+            <div class="mini-stat">
+              <span>Warn levels</span>
+              <strong id="owner-warn-level">2</strong>
+            </div>
+            <div class="mini-stat">
+              <span>Active incidents</span>
+              <strong id="owner-active-incidents">1</strong>
+            </div>
+            <div class="mini-stat">
+              <span>Latency</span>
+              <strong id="owner-latency">42 ms</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="owner-grid lower-grid">
+        <div class="card">
+          <h2>Protection status</h2>
+          <div class="table-list">
+            <div class="table-row"><span>Kepler</span><strong id="kepler-status-label">Armed</strong></div>
+            <div class="table-row"><span>Watchdog</span><strong id="watchdog-status-label">Online</strong></div>
+            <div class="table-row"><span>Auto moderation</span><strong id="moderation-status-label">Enabled</strong></div>
+            <div class="table-row"><span>Escalations</span><strong id="escalation-status-label">Queued</strong></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Incident feed</h2>
+          <ul class="incident-list" id="incident-feed-list">
+            <li>
+              <div class="incident-time">Now</div>
+              <div>Guild moderation sweep completed</div>
+            </li>
+            <li>
+              <div class="incident-time">12m</div>
+              <div>Kepler watch heartbeat acknowledged</div>
+            </li>
+            <li>
+              <div class="incident-time">36m</div>
+              <div>Manual review queue refreshed</div>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="notification-panel card">
+        <div class="card-header-row">
+          <h2>Lockdown message / notifications</h2>
+          <span class="mini-pill">Broadcast</span>
+        </div>
+
+        <div class="composer-grid">
+          <div class="composer-field">
+            <label for="notification-target">Audience</label>
+            <select id="notification-target">
+              <option>All protected guilds</option>
+              <option>Bot owner only</option>
+              <option>Selected guild owners</option>
+            </select>
+          </div>
+
+          <div class="composer-field">
+            <label for="notification-channel">Channel</label>
+            <select id="notification-channel">
+              <option>System alert</option>
+              <option>Discord DM</option>
+              <option>Email digest</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="composer-field full-width">
+          <label for="lockdown-message">Message</label>
+          <textarea id="lockdown-message" rows="5">Security lockdown is active. Please pause high-risk actions and await further guidance.</textarea>
+        </div>
+
+        <div class="composer-actions">
+          <button class="owner-action primary" data-send-notice="true">Send lockdown alert</button>
+          <button class="owner-action" data-save-template="true">Save as template</button>
+          <button class="owner-action warning" data-preview-notice="true">Preview notice</button>
+        </div>
+
+        <div id="owner-feedback" class="owner-feedback" aria-live="polite">Ready to broadcast.</div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

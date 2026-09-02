@@ -3,7 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "commonjs",
+  "scripts": {
+    "dev": "netlify dev --port 8888",
+    "start": "netlify dev --port 8888"
+  },
   "dependencies": {
     "mongodb": "^6.8.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.36.0"
   }
 }
