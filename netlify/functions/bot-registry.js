@@ -14,6 +14,11 @@ function isOwner(event) {
   return ['owner', 'admin'].includes(getSession(event)?.role);
 }
 
+function canAccessBot(session, bot) {
+  if (session.role === 'owner' || session.permissions?.includes('*')) return true;
+  return bot.ownerIds?.includes(session.userId) || bot.guildIds?.some((guildId) => session.guildIds?.includes(guildId));
+}
+
 exports.handler = async (event) => {
   if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(event.httpMethod)) {
     return json(405, { error: 'Method Not Allowed' });
@@ -29,7 +34,9 @@ exports.handler = async (event) => {
     await bots.createIndex({ botId: 1 }, { unique: true });
 
     if (event.httpMethod === 'GET') {
-      const filter = session.role === 'owner' || session.permissions?.includes('*') ? {} : { ownerIds: session.userId };
+      const filter = session.role === 'owner' || session.permissions?.includes('*')
+        ? {}
+        : { $or: [{ ownerIds: session.userId }, { guildIds: { $in: session.guildIds || [] } }] };
       const records = await bots.find(
         filter,
         { projection: { _id: 0, botId: 1, name: 1, status: 1, guildIds: 1, createdAt: 1, lastSeenAt: 1 } }
@@ -46,6 +53,8 @@ exports.handler = async (event) => {
 
     if (event.httpMethod === 'PATCH') {
       if (!payload.botId) return json(400, { error: 'botId is required' });
+      const targetBot = await bots.findOne({ botId: payload.botId });
+      if (!targetBot || !canAccessBot(session, targetBot)) return json(404, { error: 'Bot not found' });
       if (['rotate', 'revoke'].includes(payload.action)) {
         if (!hasPermission(session, 'bot.delete')) return json(403, { error: 'bot.delete permission required for credential changes' });
         if (payload.action === 'revoke') {

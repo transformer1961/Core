@@ -330,12 +330,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     document.querySelectorAll('[data-owner-action]').forEach((button) => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', async () => {
         const action = button.dataset.ownerAction;
         const state = getOwnerState();
 
         if (action === 'arm-kepler') {
-          queueCommand('enable').catch((error) => setFeedback(error.message, 'warning'));
+          try { await queueCommand('enable'); } catch (error) { setFeedback(error.message, 'warning'); return; }
           state.kepler = 'Armed';
           saveOwnerState(state);
           setFeedback('Kepler armed and waiting for escalation triggers.', 'success');
@@ -343,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (action === 'trigger-lockdown') {
-          queueCommand('trigger_lockdown', true).catch((error) => setFeedback(error.message, 'warning'));
+          try { await queueCommand('trigger_lockdown', true); } catch (error) { setFeedback(error.message, 'warning'); return; }
           state.kepler = 'Triggered';
           state.watchdog = 'Alerting';
           state.moderation = 'Locked';
@@ -354,13 +354,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (action === 'restart-bot') {
-          queueCommand('restart').catch((error) => setFeedback(error.message, 'warning'));
+          try { await queueCommand('restart'); } catch (error) { setFeedback(error.message, 'warning'); return; }
           setFeedback('Bot restart requested. Service will be refreshed shortly.', 'neutral');
           updateIncidentList('Bot restart command queued');
         }
 
         if (action === 'shutdown-bot') {
-          queueCommand('shutdown', true).catch((error) => setFeedback(error.message, 'warning'));
+          try { await queueCommand('shutdown', true); } catch (error) { setFeedback(error.message, 'warning'); return; }
         }
 
         if (action === 'deploy-update') {

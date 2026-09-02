@@ -13,9 +13,9 @@ exports.handler = async (event) => {
 
   try {
     const db = await getDb();
-    const statsDoc = await db.collection('bot_status').findOne({ _id: 'global' });
+    const statsDocs = await db.collection('bot_status').find({}).toArray();
 
-    if (!statsDoc) {
+    if (!statsDocs.length) {
       // No data yet — bot hasn't pushed a heartbeat/webhook event.
       return {
         statusCode: 200,
@@ -32,6 +32,19 @@ exports.handler = async (event) => {
         }),
       };
     }
+
+    const statsDoc = statsDocs.length === 1
+      ? statsDocs[0]
+      : {
+        online: statsDocs.some((stats) => stats.online === true),
+        guilds: statsDocs.reduce((total, stats) => total + (Number(stats.guilds) || 0), 0),
+        uptimeSeconds: Math.max(...statsDocs.map((stats) => Number(stats.uptimeSeconds) || 0)),
+        latencyMs: Math.round(statsDocs.reduce((total, stats) => total + (Number(stats.latencyMs) || 0), 0) / statsDocs.filter((stats) => Number.isFinite(Number(stats.latencyMs))).length) || null,
+        activeIncidents: statsDocs.reduce((total, stats) => total + (Number(stats.activeIncidents) || 0), 0),
+        incidentsHandledTotal: statsDocs.reduce((total, stats) => total + (Number(stats.incidentsHandledTotal) || 0), 0),
+        keplerStatus: statsDocs.some((stats) => stats.keplerStatus === 'triggered') ? 'triggered' : 'armed',
+        lastDeploy: statsDocs.map((stats) => stats.lastDeploy).filter(Boolean).sort().at(-1) || null,
+      };
 
     // Only expose aggregate fields — never per-guild identifying data here.
     const publicStats = {

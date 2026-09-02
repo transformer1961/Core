@@ -80,7 +80,7 @@ function hasPermission(session, permission, guildId = null) {
 }
 
 function cookie(name, value, maxAge) {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const secure = process.env.NODE_ENV === 'production' || process.env.CONTEXT === 'production' ? '; Secure' : '';
   return `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`;
 }
 

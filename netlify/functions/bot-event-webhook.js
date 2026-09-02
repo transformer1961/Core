@@ -34,6 +34,7 @@
 
 const crypto = require('crypto');
 const { getDb } = require('./utils/db');
+const { authenticateBot, getHeader } = require('./utils/bot-auth');
 
 function isValidSignature(rawBody, signatureHeader, secret) {
   if (!signatureHeader) return false;
@@ -72,9 +73,12 @@ exports.handler = async (event) => {
 
   try {
     const db = await getDb();
+    const botId = payload.botId || getHeader(event, 'x-sns-bot-id');
+    if (botId !== 'global' && !await authenticateBot(event, rawBody, false)) {
+      return { statusCode: 401, body: JSON.stringify({ error: 'Registered bot authentication required' }) };
+    }
 
     if (payload.type === 'heartbeat') {
-      const botId = payload.botId || event.headers['x-sns-bot-id'] || 'global';
       await db.collection('bot_status').updateOne(
         { _id: botId },
         {
@@ -93,6 +97,9 @@ exports.handler = async (event) => {
         },
         { upsert: true }
       );
+      if (botId !== 'global') {
+        await db.collection('bots').updateOne({ botId }, { $set: { lastSeenAt: new Date(), status: 'active' } });
+      }
       return { statusCode: 200, body: JSON.stringify({ ok: true, type: 'heartbeat' }) };
     }
 

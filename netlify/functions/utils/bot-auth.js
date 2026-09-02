@@ -18,7 +18,7 @@ function isValidSignature(rawBody, signature) {
   return actualBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
-async function authenticateBot(event, rawBody) {
+async function authenticateBot(event, rawBody, checkGlobalDisable = true) {
   const botId = getHeader(event, 'x-sns-bot-id');
   const token = getHeader(event, 'x-sns-bot-token');
   const signature = getHeader(event, 'x-sns-signature');
@@ -29,7 +29,7 @@ async function authenticateBot(event, rawBody) {
     secretHash: hashToken(token),
     status: 'active',
   });
-  if (bot && await require('./security').isGloballyDisabled(await getDb())) return null;
+  if (bot && checkGlobalDisable && await require('./security').isGloballyDisabled(await getDb())) return null;
   return bot || null;
 }
 

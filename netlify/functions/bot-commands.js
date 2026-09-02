@@ -43,15 +43,20 @@ exports.handler = async (event) => {
 
   try {
     if (event.httpMethod === 'POST') {
-      if (!isAdmin(event)) return json(401, { error: 'Admin authentication required' });
+      const session = getSession(event);
+      const adminKeyValid = timingSafeEqualText(getHeader(event, 'x-sns-admin-key'), process.env.SNS_ADMIN_KEY);
+      if (!hasPermission(session, 'bot.command') && !adminKeyValid) return json(401, { error: 'Admin authentication required' });
       if (!payload.botId || !allowedCommands.has(payload.command)) {
         return json(400, { error: 'botId and a supported command are required' });
       }
-      const session = getSession(event);
-      if (!hasPermission(session, 'bot.command', payload.guildId || null)) return json(403, { error: 'bot.command permission required for this guild' });
+      if (!adminKeyValid && !hasPermission(session, 'bot.command', payload.guildId || null)) return json(403, { error: 'bot.command permission required for this guild' });
       const db = await getDb();
       if (!await allowRateLimit(db, `command:${getClientKey(event, session?.userId || 'admin-key')}`, 20, 60 * 1000)) return json(429, { error: 'Too many command requests' });
       if (payload.confirmed !== true && ['shutdown', 'trigger_lockdown'].includes(payload.command)) return json(409, { error: 'Explicit confirmation is required for this command' });
+      const bot = await db.collection('bots').findOne({ botId: payload.botId, status: 'active' }, { projection: { _id: 0, botId: 1, guildIds: 1, ownerIds: 1 } });
+      if (!bot) return json(409, { error: 'Bot must be registered and approved before receiving commands' });
+      const canAccessBot = session?.role === 'owner' || session?.permissions?.includes('*') || bot.ownerIds?.includes(session.userId) || bot.guildIds?.some((guildId) => session.guildIds?.includes(guildId));
+      if (!adminKeyValid && !canAccessBot) return json(403, { error: 'bot.command permission is not valid for this bot' });
 
       const commands = db.collection('commands');
 
@@ -100,8 +105,12 @@ exports.handler = async (event) => {
       return json(400, { error: 'commandId and a valid status are required' });
     }
 
+    const transitionFilter = payload.status === 'running'
+      ? { status: 'received' }
+      : { status: { $in: ['received', 'running'] } };
+
     const result = await commands.findOneAndUpdate(
-      { commandId: payload.commandId, botId },
+      { commandId: payload.commandId, botId, ...transitionFilter },
       {
         $set: {
           status: payload.status,

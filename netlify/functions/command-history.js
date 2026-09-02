@@ -17,6 +17,10 @@ exports.handler = async (event) => {
     const query = event.queryStringParameters || {};
     const filter = {};
     if (query.botId && /^[a-z0-9][a-z0-9_-]{2,48}$/.test(query.botId)) filter.botId = query.botId;
+    if (session.role !== 'owner' && !session.permissions?.includes('*') && session.guildIds?.length) {
+      const scopedBots = await db.collection('bots').find({ guildIds: { $in: session.guildIds } }, { projection: { _id: 0, botId: 1 } }).toArray();
+      filter.botId = { $in: scopedBots.map((bot) => bot.botId) };
+    }
     const history = await db.collection('command_history').find(filter, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(100).toArray();
     return json(200, { history });
   } catch (error) {

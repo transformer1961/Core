@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { getDb } = require('./utils/db');
+const { allowRateLimit, getClientKey } = require('./utils/security');
 
 function json(statusCode, body) {
   return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
@@ -30,7 +31,9 @@ exports.handler = async (event) => {
   }
 
   try {
-    const bots = (await getDb()).collection('bots');
+    const db = await getDb();
+    if (!await allowRateLimit(db, `enroll:${getClientKey(event)}`, 10, 60 * 60 * 1000)) return json(429, { error: 'Too many enrollment requests' });
+    const bots = db.collection('bots');
     if (event.httpMethod === 'POST') {
       if (!/^[a-z0-9][a-z0-9_-]{2,48}$/.test(payload.botId || '') || !payload.name?.trim()) {
         return json(400, { error: 'botId and name are required' });
