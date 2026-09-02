@@ -6,7 +6,7 @@
   <title>SNS Core — Sentinel Network Systems</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body data-page="home">
 
   <nav class="nav">
     <div class="nav-brand">
@@ -49,6 +49,48 @@
     <div class="stat-card">
       <div class="stat-label">Uptime</div>
       <div class="stat-value" id="stat-uptime">—</div>
+    </div>
+  </div>
+
+  <div class="panel-wrap">
+    <div class="panel-shell">
+      <div class="panel-header">
+        <div>
+          <div class="panel-kicker">Control panel</div>
+          <h2>Core system snapshot</h2>
+        </div>
+        <span class="panel-live">Live</span>
+      </div>
+
+      <div class="panel-body">
+        <div class="panel-main">
+          <div class="panel-row">
+            <span>Bot state</span>
+            <strong id="panel-state">Online</strong>
+          </div>
+          <div class="panel-row">
+            <span>Protected guilds</span>
+            <strong id="panel-guilds">—</strong>
+          </div>
+          <div class="panel-row">
+            <span>Incidents handled</span>
+            <strong id="panel-incidents">—</strong>
+          </div>
+          <div class="panel-row">
+            <span>Current uptime</span>
+            <strong id="panel-uptime">—</strong>
+          </div>
+        </div>
+
+        <div class="panel-side">
+          <div class="panel-side-header">Recent activity</div>
+          <ul class="activity-list">
+            <li><span class="activity-dot success"></span>Heartbeat acknowledged</li>
+            <li><span class="activity-dot warning"></span>Kepler watch remains armed</li>
+            <li><span class="activity-dot info"></span>Bot sync running normally</li>
+          </ul>
+        </div>
+      </div>
     </div>
   </div>
 

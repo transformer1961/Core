@@ -6,6 +6,11 @@
   node_bundler = "esbuild"
 
 [[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
+  from = "/api/bot/stats"
+  to = "/.netlify/functions/bot-stats"
+  status = 200
+
+[[redirects]]
+  from = "/api/webhooks/bot-event"
+  to = "/.netlify/functions/bot-event-webhook"
   status = 200

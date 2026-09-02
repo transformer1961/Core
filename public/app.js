@@ -14,6 +14,10 @@ document.addEventListener('DOMContentLoaded', () => {
     uptime: document.getElementById('stat-uptime'),
     summary: document.getElementById('status-summary'),
     state: document.getElementById('status-state'),
+    panelState: document.getElementById('panel-state'),
+    panelGuilds: document.getElementById('panel-guilds'),
+    panelIncidents: document.getElementById('panel-incidents'),
+    panelUptime: document.getElementById('panel-uptime'),
     uptimeValue: document.getElementById('status-uptime'),
     guildsValue: document.getElementById('status-guilds'),
     incidentsValue: document.getElementById('status-incidents')
@@ -40,14 +44,26 @@ document.addEventListener('DOMContentLoaded', () => {
       if (statusNodes.state) {
         statusNodes.state.textContent = data.online ? 'Online' : 'Offline';
       }
+      if (statusNodes.panelState) {
+        statusNodes.panelState.textContent = data.online ? 'Online' : 'Offline';
+      }
       if (statusNodes.uptimeValue) {
         statusNodes.uptimeValue.textContent = formatUptime(data.uptimeSeconds ?? 0);
+      }
+      if (statusNodes.panelUptime) {
+        statusNodes.panelUptime.textContent = formatUptime(data.uptimeSeconds ?? 0);
       }
       if (statusNodes.guildsValue) {
         statusNodes.guildsValue.textContent = data.guilds ?? 0;
       }
+      if (statusNodes.panelGuilds) {
+        statusNodes.panelGuilds.textContent = data.guilds ?? 0;
+      }
       if (statusNodes.incidentsValue) {
         statusNodes.incidentsValue.textContent = data.incidentsHandledTotal ?? 0;
+      }
+      if (statusNodes.panelIncidents) {
+        statusNodes.panelIncidents.textContent = data.incidentsHandledTotal ?? 0;
       }
     } catch (error) {
       console.error('Stats load failed', error);
