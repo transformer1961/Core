@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Status — SNS Core</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="status">
+  <nav class="nav">
+    <div class="nav-brand">
+      <div class="nav-mark">S</div>
+      <div class="nav-name">SNS Core<span>by Sentinel Network Systems</span></div>
+    </div>
+    <div class="nav-links">
+      <a href="/" data-page="home">Home</a>
+      <a href="/features.html" data-page="features">Features</a>
+      <a href="/status.html" data-page="status">Status</a>
+      <a href="/kepler.html" data-page="kepler">Kepler</a>
+      <a href="/docs.html" data-page="docs">Docs</a>
+    </div>
+    <button class="btn-login">Sign in with Discord</button>
+  </nav>
+
+  <main>
+    <div class="page-shell">
+      <div class="page-hero">
+        <div class="eyebrow">Operational status</div>
+        <h1>Status</h1>
+        <p>Live bot telemetry and aggregate system health for the SNS Core network.</p>
+      </div>
+
+      <div class="content-grid">
+        <div class="card status-panel">
+          <div class="status-badge" id="status-summary">System nominal</div>
+          <div class="table-list">
+            <div class="table-row"><span>Bot state</span><strong id="status-state">Loading…</strong></div>
+            <div class="table-row"><span>Guilds</span><strong id="status-guilds">—</strong></div>
+            <div class="table-row"><span>Uptime</span><strong id="status-uptime">—</strong></div>
+            <div class="table-row"><span>Incidents handled</span><strong id="status-incidents">—</strong></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Service health</h2>
+          <div class="meta-row">
+            <span class="mini-pill">Heartbeat</span>
+            <span class="mini-pill">MongoDB</span>
+            <span class="mini-pill">Webhook</span>
+          </div>
+          <ul>
+            <li>Signed payload validation is active for incoming bot events.</li>
+            <li>Public data is intentionally limited to aggregate stats.</li>
+            <li>Incident and guild-level events are retained in the database.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

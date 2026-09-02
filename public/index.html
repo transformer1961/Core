@@ -14,11 +14,11 @@
       <div class="nav-name">SNS Core<span>by Sentinel Network Systems</span></div>
     </div>
     <div class="nav-links">
-      <a href="/" class="active">Home</a>
-      <a href="/features.html">Features</a>
-      <a href="/status.html">Status</a>
-      <a href="/kepler.html">Kepler</a>
-      <a href="/docs.html">Docs</a>
+      <a href="/" data-page="home">Home</a>
+      <a href="/features.html" data-page="features">Features</a>
+      <a href="/status.html" data-page="status">Status</a>
+      <a href="/kepler.html" data-page="kepler">Kepler</a>
+      <a href="/docs.html" data-page="docs">Docs</a>
     </div>
     <button class="btn-login">Sign in with Discord</button>
   </nav>
@@ -69,13 +69,7 @@
     </div>
   </div>
 
-  <script>
-    // Placeholder — will be replaced by a fetch to /api/bot/stats
-    async function loadStats() {
-      // fetch('/api/bot/stats').then(r => r.json()).then(data => { ...populate... })
-    }
-    loadStats();
-  </script>
+  <script src="/app.js"></script>
 
 </body>
 </html>
