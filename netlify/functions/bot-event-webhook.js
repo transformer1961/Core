@@ -73,7 +73,11 @@ exports.handler = async (event) => {
 
   try {
     const db = await getDb();
-    const botId = payload.botId || getHeader(event, 'x-sns-bot-id');
+    const headerBotId = getHeader(event, 'x-sns-bot-id');
+    const botId = payload.botId || headerBotId || 'global';
+    if (botId !== 'global' && botId !== headerBotId) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'botId must match x-sns-bot-id' }) };
+    }
     if (botId !== 'global' && !await authenticateBot(event, rawBody, false)) {
       return { statusCode: 401, body: JSON.stringify({ error: 'Registered bot authentication required' }) };
     }
