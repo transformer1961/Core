@@ -21,7 +21,7 @@ exports.handler = async (event) => {
       const scopedBots = await db.collection('bots').find({ guildIds: { $in: session.guildIds } }, { projection: { _id: 0, botId: 1 } }).toArray();
       filter.botId = { $in: scopedBots.map((bot) => bot.botId) };
     }
-    const history = await db.collection('command_history').find(filter, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(100).toArray();
+    const history = await db.collection('command_history').find(filter, { projection: { _id: 0, commandId: 1, botId: 1, command: 1, status: 1, actorId: 1, result: 1, error: 1, createdAt: 1 } }).sort({ createdAt: -1 }).limit(100).toArray();
     return json(200, { history });
   } catch (error) {
     console.error('command-history error:', error);

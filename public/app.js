@@ -328,7 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const response = await fetch('/api/bot/command-history', { credentials: 'same-origin' });
         if (!response.ok) throw new Error('Failed to load command history');
         const data = await response.json();
-        commandHistoryList.innerHTML = (data.history || []).map((entry) => `<div class="command-history-row"><strong>${escapeHtml(entry.botId || 'Unknown bot')}</strong><span>${escapeHtml(entry.status)}</span><span>${escapeHtml(entry.commandId || '')}</span></div>`).join('') || '<p class="empty-state">No command history yet.</p>';
+        commandHistoryList.innerHTML = (data.history || []).map((entry) => `<div class="command-history-row"><strong>${escapeHtml(entry.command || 'Unknown action')}</strong><span>${escapeHtml(entry.status)} · ${escapeHtml(entry.botId || 'Unknown bot')}</span><span>By ${escapeHtml(entry.actorId || 'system')} · ${escapeHtml(new Date(entry.createdAt).toLocaleString())}<br>${escapeHtml(entry.commandId || '')}</span></div>`).join('') || '<p class="empty-state">No command history yet.</p>';
       } catch (error) {
         commandHistoryList.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`;
       }

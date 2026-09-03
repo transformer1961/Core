@@ -73,7 +73,7 @@ exports.handler = async (event) => {
         updatedAt: new Date(),
       };
       await commands.insertOne(command);
-      await db.collection('command_history').insertOne({ commandId: command.commandId, botId: command.botId, status: 'queued', createdAt: new Date(), actorId: session?.userId || 'admin-key' });
+      await db.collection('command_history').insertOne({ commandId: command.commandId, botId: command.botId, command: command.command, status: 'queued', actorId: session?.userId || 'admin-key', createdAt: new Date() });
       await writeAudit(db, { actorId: session?.userId || 'admin-key', action: 'command.queued', targetType: 'bot', targetId: command.botId, details: { commandId: command.commandId, command: command.command, guildId: command.guildId, reason: command.reason } });
       return json(202, { ok: true, commandId: command.commandId, status: command.status });
     }
@@ -97,7 +97,7 @@ exports.handler = async (event) => {
       );
 
       if (!command) return json(200, { command: null });
-      await db.collection('command_history').insertOne({ commandId: command.commandId, botId, status: 'received', createdAt: new Date() });
+      await db.collection('command_history').insertOne({ commandId: command.commandId, botId, command: command.command, status: 'received', actorId: botId, createdAt: new Date() });
       return json(200, { command });
     }
 
@@ -124,7 +124,7 @@ exports.handler = async (event) => {
     );
 
     if (!result) return json(404, { error: 'Command not found for this bot' });
-    await db.collection('command_history').insertOne({ commandId: payload.commandId, botId, status: payload.status, result: payload.result || null, error: payload.error || null, createdAt: new Date() });
+    await db.collection('command_history').insertOne({ commandId: payload.commandId, botId, command: result.command, status: payload.status, actorId: botId, result: payload.result || null, error: payload.error || null, createdAt: new Date() });
     await writeAudit(db, { actorId: botId, action: `command.${payload.status}`, targetType: 'command', targetId: payload.commandId, details: { result: payload.result || null, error: payload.error || null } });
     return json(200, { ok: true, commandId: payload.commandId, status: result.status });
   } catch (error) {
