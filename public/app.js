@@ -176,6 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const accessForm = document.getElementById('access-form');
     const accessList = document.getElementById('access-list');
     const commandHistoryList = document.getElementById('command-history-list');
+    const auditList = document.getElementById('audit-list');
 
     const STORAGE_KEY = 'sns-owner-panel-state';
     const getOwnerState = () => {
@@ -330,6 +331,18 @@ document.addEventListener('DOMContentLoaded', () => {
         commandHistoryList.innerHTML = (data.history || []).map((entry) => `<div class="command-history-row"><strong>${escapeHtml(entry.botId || 'Unknown bot')}</strong><span>${escapeHtml(entry.status)}</span><span>${escapeHtml(entry.commandId || '')}</span></div>`).join('') || '<p class="empty-state">No command history yet.</p>';
       } catch (error) {
         commandHistoryList.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`;
+      }
+    };
+
+    const loadAuditLog = async () => {
+      if (!auditList) return;
+      try {
+        const response = await fetch('/api/audit-log', { credentials: 'same-origin' });
+        if (!response.ok) throw new Error('Failed to load audit log');
+        const data = await response.json();
+        auditList.innerHTML = (data.records || []).map((record) => `<div class="audit-row"><strong>${escapeHtml(record.action)}</strong><span>${escapeHtml(record.targetType)}${record.targetId ? `: ${escapeHtml(record.targetId)}` : ''}</span><span>${escapeHtml(record.actorId)} · ${escapeHtml(new Date(record.createdAt).toLocaleString())}</span></div>`).join('') || '<p class="empty-state">No audit events yet.</p>';
+      } catch (error) {
+        auditList.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`;
       }
     };
 
@@ -530,6 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadStats();
         await loadBots();
         await loadCommandHistory();
+        await loadAuditLog();
         markRefreshed();
         refreshButton.disabled = false;
         refreshButton.textContent = 'Refresh data';
@@ -572,6 +586,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadBots();
     loadAccess();
     loadCommandHistory();
+    loadAuditLog();
   }
 
   loadSession();
