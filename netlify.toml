@@ -51,6 +51,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/notification-templates"
+  to = "/.netlify/functions/notification-templates"
+  status = 200
+
+[[redirects]]
   from = "/api/auth/discord"
   to = "/.netlify/functions/auth-discord"
   status = 200

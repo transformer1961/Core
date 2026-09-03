@@ -400,6 +400,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const previewNoticeButton = document.querySelector('[data-preview-notice="true"]');
     const saveTemplateButton = document.querySelector('[data-save-template="true"]');
     const messageBox = document.getElementById('lockdown-message');
+    const templateSelect = document.getElementById('notification-template');
+
+    const loadTemplates = async () => {
+      if (!templateSelect) return;
+      try {
+        const response = await fetch('/api/notification-templates', { credentials: 'same-origin' });
+        if (!response.ok) return;
+        const data = await response.json();
+        templateSelect.innerHTML = '<option value="">Choose a saved template</option>' + (data.templates || []).map((template) => `<option value="${escapeHtml(template.templateId)}" data-message="${escapeHtml(template.message)}" data-audience="${escapeHtml(template.audience)}" data-channel="${escapeHtml(template.channel)}">${escapeHtml(template.name)}</option>`).join('');
+      } catch {
+        // Templates are optional while the API is unavailable.
+      }
+    };
 
     if (sendAlertButton) {
       sendAlertButton.addEventListener('click', async () => {
@@ -446,8 +459,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (saveTemplateButton) {
-      saveTemplateButton.addEventListener('click', () => {
-        setFeedback('Current message saved as a reusable lockdown template.', 'success');
+      saveTemplateButton.addEventListener('click', async () => {
+        const name = window.prompt('Name this notification template:');
+        const message = messageBox?.value?.trim();
+        if (!name || !message) return;
+        try {
+          const response = await fetch('/api/notification-templates', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, message, audience: document.getElementById('notification-target')?.value, channel: document.getElementById('notification-channel')?.value }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Template could not be saved');
+          setFeedback(`Template ${data.template.name} saved.`, 'success');
+          await loadTemplates();
+        } catch (error) {
+          setFeedback(error.message, 'warning');
+        }
+      });
+    }
+
+    if (templateSelect) {
+      templateSelect.addEventListener('change', () => {
+        const option = templateSelect.selectedOptions[0];
+        if (!option?.value) return;
+        if (messageBox) messageBox.value = option.dataset.message || '';
+        const target = document.getElementById('notification-target');
+        const channel = document.getElementById('notification-channel');
+        if (target && option.dataset.audience) target.value = option.dataset.audience;
+        if (channel && option.dataset.channel) channel.value = option.dataset.channel;
+        setFeedback(`Loaded template ${option.textContent}.`, 'neutral');
       });
     }
 
@@ -632,6 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAccess();
     loadCommandHistory();
     loadAuditLog();
+    loadTemplates();
   }
 
   loadSession();
