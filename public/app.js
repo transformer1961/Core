@@ -297,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ? bots.map((bot) => `<option value="${escapeHtml(bot.botId)}">${escapeHtml(bot.name)}</option>`).join('')
           : '<option value="">No bots registered</option>';
         botList.innerHTML = bots.length
-          ? bots.map((bot) => `<div class="bot-list-item"><div><strong>${escapeHtml(bot.name)}</strong><span class="bot-id">${escapeHtml(bot.botId)}</span></div><div class="bot-list-meta"><span>${escapeHtml(bot.status || 'pending')}</span>${['owner', 'admin'].includes(sessionRole) && bot.status === 'pending' ? `<button type="button" class="bot-review approve" data-bot-review="active" data-bot-id="${escapeHtml(bot.botId)}">Approve</button><button type="button" class="bot-review deny" data-bot-review="denied" data-bot-id="${escapeHtml(bot.botId)}">Deny</button>` : ''}${sessionRole === 'owner' && bot.status === 'active' ? `<button type="button" class="bot-review" data-bot-credential="rotate" data-bot-id="${escapeHtml(bot.botId)}">Rotate</button><button type="button" class="bot-review deny" data-bot-credential="revoke" data-bot-id="${escapeHtml(bot.botId)}">Revoke</button>` : ''}</div></div>`).join('')
+          ? bots.map((bot) => `<div class="bot-list-item"><div><strong>${escapeHtml(bot.name)}</strong><span class="bot-id">${escapeHtml(bot.botId)}</span></div><div class="bot-list-meta"><span>${escapeHtml(bot.status || 'pending')}</span>${['owner', 'admin'].includes(sessionRole) && bot.status === 'pending' ? `<button type="button" class="bot-review approve" data-bot-review="active" data-bot-id="${escapeHtml(bot.botId)}">Approve</button><button type="button" class="bot-review deny" data-bot-review="denied" data-bot-id="${escapeHtml(bot.botId)}">Deny</button>` : ''}${sessionRole === 'owner' && bot.status === 'active' ? `<button type="button" class="bot-review" data-bot-credential="rotate" data-bot-id="${escapeHtml(bot.botId)}">Rotate</button><button type="button" class="bot-review deny" data-bot-credential="revoke" data-bot-id="${escapeHtml(bot.botId)}">Revoke</button>` : ''}${sessionRole === 'owner' ? `<button type="button" class="bot-review deny" data-bot-remove="true" data-bot-id="${escapeHtml(bot.botId)}">Remove</button>` : ''}</div></div>`).join('')
           : '<p class="empty-state">No bots registered yet.</p>';
         if (botCountLabel) botCountLabel.textContent = `${bots.length} registered`;
       } catch (error) {
@@ -494,6 +494,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (botList) {
       botList.addEventListener('click', async (event) => {
+        const removeButton = event.target.closest('[data-bot-remove="true"]');
+        if (removeButton) {
+          if (!window.confirm(`Remove ${removeButton.dataset.botId} from SNS Core? This revokes its access.`)) return;
+          removeButton.disabled = true;
+          try {
+            const response = await fetch('/api/bots', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botId: removeButton.dataset.botId }) });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Bot removal failed');
+            setFeedback(`${removeButton.dataset.botId} removed.`, 'warning');
+            await loadBots();
+          } catch (error) {
+            setFeedback(error.message, 'warning');
+            removeButton.disabled = false;
+          }
+          return;
+        }
         const credentialButton = event.target.closest('[data-bot-credential]');
         if (credentialButton) {
           if (!window.confirm(`${credentialButton.dataset.botCredential === 'revoke' ? 'Revoke' : 'Rotate'} credentials for ${credentialButton.dataset.botId}?`)) return;

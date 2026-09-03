@@ -22,6 +22,12 @@ exports.handler = async (event) => {
       filter.botId = { $in: scopedBots.map((bot) => bot.botId) };
     }
     const history = await db.collection('command_history').find(filter, { projection: { _id: 0, commandId: 1, botId: 1, command: 1, status: 1, actorId: 1, result: 1, error: 1, createdAt: 1 } }).sort({ createdAt: -1 }).limit(100).toArray();
+    const missingCommandIds = history.filter((entry) => !entry.command).map((entry) => entry.commandId);
+    if (missingCommandIds.length) {
+      const commands = await db.collection('commands').find({ commandId: { $in: missingCommandIds } }, { projection: { _id: 0, commandId: 1, command: 1 } }).toArray();
+      const commandNames = new Map(commands.map((command) => [command.commandId, command.command]));
+      history.forEach((entry) => { entry.command = commandNames.get(entry.commandId) || 'legacy command'; });
+    }
     return json(200, { history });
   } catch (error) {
     console.error('command-history error:', error);

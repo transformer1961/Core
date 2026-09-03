@@ -115,7 +115,9 @@ exports.handler = async (event) => {
     }
 
     if (!payload.botId) return json(400, { error: 'botId is required' });
-    const result = await bots.deleteOne({ botId: payload.botId, ownerIds: session.userId });
+    const targetBot = await bots.findOne({ botId: payload.botId });
+    if (!targetBot || !canAccessBot(session, targetBot)) return json(404, { error: 'Bot not found' });
+    const result = await bots.deleteOne({ botId: payload.botId });
     if (!result.deletedCount) return json(404, { error: 'Bot not found' });
     await writeAudit(db, { actorId: session.userId, action: 'bot.deleted', targetType: 'bot', targetId: payload.botId });
     return json(200, { ok: true, botId: payload.botId });
