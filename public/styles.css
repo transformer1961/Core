@@ -432,6 +432,13 @@ a { color: inherit; text-decoration: none; }
   margin-top: 2px;
 }
 
+.bot-seen {
+  display: block;
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: 5px;
+}
+
 .bot-list-meta {
   display: flex;
   align-items: center;
@@ -455,6 +462,17 @@ a { color: inherit; text-decoration: none; }
 
 .bot-review.approve { color: #9df0ba; }
 .bot-review.deny { color: #f5d59a; }
+
+.bot-health {
+  text-transform: capitalize;
+}
+
+.bot-health.online { color: #9df0ba; }
+.bot-health.stale { color: #f5d59a; }
+.bot-health.offline,
+.bot-health.revoked,
+.bot-health.denied { color: #f5b0a8; }
+.bot-health.pending { color: var(--text-dim); }
 
 .empty-state {
   color: var(--text-dim);

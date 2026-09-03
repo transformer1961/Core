@@ -285,9 +285,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!botSelect || !botList) return;
       try {
         const response = await fetch('/api/bots', { credentials: 'same-origin' });
-        if (response.status === 401 || response.status === 403) {
+        if (response.status === 401) {
           botSelect.innerHTML = '<option value="">Sign in to load bots</option>';
           botList.innerHTML = '<p class="empty-state">Sign in with Discord to manage registered bots.</p>';
+          return;
+        }
+        if (response.status === 403) {
+          botSelect.innerHTML = '<option value="">Permission required</option>';
+          botList.innerHTML = '<p class="empty-state">Your account does not have the bot.read permission.</p>';
           return;
         }
         if (!response.ok) throw new Error('Failed to load bots');
@@ -297,7 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ? bots.map((bot) => `<option value="${escapeHtml(bot.botId)}">${escapeHtml(bot.name)}</option>`).join('')
           : '<option value="">No bots registered</option>';
         botList.innerHTML = bots.length
-          ? bots.map((bot) => `<div class="bot-list-item"><div><strong>${escapeHtml(bot.name)}</strong><span class="bot-id">${escapeHtml(bot.botId)}</span></div><div class="bot-list-meta"><span>${escapeHtml(bot.status || 'pending')}</span>${['owner', 'admin'].includes(sessionRole) && bot.status === 'pending' ? `<button type="button" class="bot-review approve" data-bot-review="active" data-bot-id="${escapeHtml(bot.botId)}">Approve</button><button type="button" class="bot-review deny" data-bot-review="denied" data-bot-id="${escapeHtml(bot.botId)}">Deny</button>` : ''}${sessionRole === 'owner' && bot.status === 'active' ? `<button type="button" class="bot-review" data-bot-credential="rotate" data-bot-id="${escapeHtml(bot.botId)}">Rotate</button><button type="button" class="bot-review deny" data-bot-credential="revoke" data-bot-id="${escapeHtml(bot.botId)}">Revoke</button>` : ''}${sessionRole === 'owner' ? `<button type="button" class="bot-review deny" data-bot-remove="true" data-bot-id="${escapeHtml(bot.botId)}">Remove</button>` : ''}</div></div>`).join('')
+          ? bots.map((bot) => `<div class="bot-list-item"><div><strong>${escapeHtml(bot.name)}</strong><span class="bot-id">${escapeHtml(bot.botId)}</span><span class="bot-seen">${bot.lastSeenAt ? `Last seen ${escapeHtml(new Date(bot.lastSeenAt).toLocaleString())}` : 'No heartbeat yet'}</span></div><div class="bot-list-meta"><span class="bot-health ${escapeHtml(bot.health || bot.status || 'pending')}">${escapeHtml(bot.health || bot.status || 'pending')}</span>${['owner', 'admin'].includes(sessionRole) && bot.status === 'pending' ? `<button type="button" class="bot-review approve" data-bot-review="active" data-bot-id="${escapeHtml(bot.botId)}">Approve</button><button type="button" class="bot-review deny" data-bot-review="denied" data-bot-id="${escapeHtml(bot.botId)}">Deny</button>` : ''}${sessionRole === 'owner' && bot.status === 'active' ? `<button type="button" class="bot-review" data-bot-credential="rotate" data-bot-id="${escapeHtml(bot.botId)}">Rotate</button><button type="button" class="bot-review deny" data-bot-credential="revoke" data-bot-id="${escapeHtml(bot.botId)}">Revoke</button>` : ''}${sessionRole === 'owner' ? `<button type="button" class="bot-review deny" data-bot-remove="true" data-bot-id="${escapeHtml(bot.botId)}">Remove</button>` : ''}</div></div>`).join('')
           : '<p class="empty-state">No bots registered yet.</p>';
         if (botCountLabel) botCountLabel.textContent = `${bots.length} registered`;
       } catch (error) {
@@ -388,8 +393,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (action === 'deploy-update') {
-          setFeedback('Deploy sequence initiated. Owner status update will follow.', 'success');
-          updateIncidentList('Deploy update initiated');
+          if (!window.confirm('Trigger a new Railway deployment for this bot service?')) return;
+          try { await queueCommand('deploy_update', true); } catch (error) { setFeedback(error.message, 'warning'); return; }
+          setFeedback('Deploy update queued. Railway will restart the service after the build completes.', 'success');
+          updateIncidentList('Deploy update queued for the bot service');
         }
 
         applyOwnerState();
@@ -673,6 +680,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     }
+
+    let panelRefreshTimer;
+    const refreshPanelData = async () => {
+      await Promise.all([loadBots(), loadCommandHistory(), loadAuditLog()]);
+      markRefreshed();
+    };
+
+    panelRefreshTimer = window.setInterval(() => {
+      if (!document.hidden) refreshPanelData().catch(() => {});
+    }, 15000);
+
+    window.addEventListener('beforeunload', () => {
+      window.clearInterval(panelRefreshTimer);
+    });
 
     applyOwnerState();
     loadBots();

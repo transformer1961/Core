@@ -4,7 +4,7 @@ const { getSession, hasPermission } = require('./utils/auth');
 const { authenticateBot, getHeader } = require('./utils/bot-auth');
 const { allowRateLimit, getClientKey, isGloballyDisabled, writeAudit } = require('./utils/security');
 
-const allowedCommands = new Set(['enable', 'disable', 'restart', 'shutdown', 'trigger_lockdown', 'broadcast_notice']);
+const allowedCommands = new Set(['enable', 'disable', 'restart', 'shutdown', 'deploy_update', 'trigger_lockdown', 'broadcast_notice']);
 
 function json(statusCode, body) {
   return {

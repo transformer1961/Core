@@ -19,6 +19,20 @@ function canAccessBot(session, bot) {
   return bot.ownerIds?.includes(session.userId) || bot.guildIds?.some((guildId) => session.guildIds?.includes(guildId));
 }
 
+function canReviewBot(session, bot) {
+  if (session.role === 'owner' || session.permissions?.includes('*')) return true;
+  return hasPermission(session, 'bot.approve', bot.guildIds?.[0] || null);
+}
+
+function getHealth(bot) {
+  if (['pending', 'denied', 'revoked'].includes(bot.status)) return bot.status;
+  if (!bot.lastSeenAt) return 'offline';
+  const ageMs = Date.now() - new Date(bot.lastSeenAt).getTime();
+  if (ageMs <= 90 * 1000) return 'online';
+  if (ageMs <= 5 * 60 * 1000) return 'stale';
+  return 'offline';
+}
+
 exports.handler = async (event) => {
   if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(event.httpMethod)) {
     return json(405, { error: 'Method Not Allowed' });
@@ -41,6 +55,7 @@ exports.handler = async (event) => {
         filter,
         { projection: { _id: 0, botId: 1, name: 1, status: 1, guildIds: 1, createdAt: 1, lastSeenAt: 1 } }
       ).sort({ name: 1 }).toArray();
+      records.forEach((record) => { record.health = getHealth(record); });
       return json(200, { bots: records });
     }
 
@@ -54,7 +69,7 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'PATCH') {
       if (!payload.botId) return json(400, { error: 'botId is required' });
       const targetBot = await bots.findOne({ botId: payload.botId });
-      if (!targetBot || !canAccessBot(session, targetBot)) return json(404, { error: 'Bot not found' });
+      if (!targetBot || (payload.status && !canReviewBot(session, targetBot)) || (!payload.status && !canAccessBot(session, targetBot))) return json(404, { error: 'Bot not found' });
       if (['rotate', 'revoke'].includes(payload.action)) {
         if (!hasPermission(session, 'bot.delete')) return json(403, { error: 'bot.delete permission required for credential changes' });
         if (payload.action === 'revoke') {
