@@ -402,10 +402,39 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageBox = document.getElementById('lockdown-message');
 
     if (sendAlertButton) {
-      sendAlertButton.addEventListener('click', () => {
+      sendAlertButton.addEventListener('click', async () => {
         const message = messageBox ? messageBox.value : '';
-        setFeedback(`Lockdown notice sent: ${message.slice(0, 60)}${message.length > 60 ? '…' : ''}`, 'success');
-        updateIncidentList('Lockdown alert sent to selected audience');
+        const botId = botSelect?.value;
+        if (!botId) {
+          setFeedback('Select an approved bot before sending a notification.', 'warning');
+          return;
+        }
+        if (!message.trim()) {
+          setFeedback('Enter a notification message first.', 'warning');
+          return;
+        }
+        if (!window.confirm('Send this notification to the selected audience?')) return;
+        try {
+          const response = await fetch('/api/bot/commands', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              botId,
+              command: 'broadcast_notice',
+              message,
+              audience: document.getElementById('notification-target')?.value,
+              channel: document.getElementById('notification-channel')?.value,
+              reason: 'Owner Panel notification',
+            }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Notification could not be queued');
+          setFeedback(`Notification queued for ${botId}. Command ID: ${data.commandId}`, 'success');
+          updateIncidentList('Notification queued for selected audience');
+        } catch (error) {
+          setFeedback(error.message, 'warning');
+        }
       });
     }
 
