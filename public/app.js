@@ -406,7 +406,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!templateSelect) return;
       try {
         const response = await fetch('/api/notification-templates', { credentials: 'same-origin' });
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (response.status !== 401 && response.status !== 403) setFeedback('Saved templates could not be loaded.', 'warning');
+          return;
+        }
         const data = await response.json();
         templateSelect.innerHTML = '<option value="">Choose a saved template</option>' + (data.templates || []).map((template) => `<option value="${escapeHtml(template.templateId)}" data-message="${escapeHtml(template.message)}" data-audience="${escapeHtml(template.audience)}" data-channel="${escapeHtml(template.channel)}">${escapeHtml(template.name)}</option>`).join('');
       } catch {
@@ -492,6 +495,8 @@ document.addEventListener('DOMContentLoaded', () => {
         setFeedback(`Loaded template ${option.textContent}.`, 'neutral');
       });
     }
+
+    window.addEventListener('sns-session-loaded', loadTemplates);
 
     if (registerBotForm) {
       registerBotForm.addEventListener('submit', async (event) => {
