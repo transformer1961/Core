@@ -43,7 +43,8 @@ exports.handler = async (event) => {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    await templates.updateOne({ templateId: record.templateId, ownerId: session.userId }, { $set: record, $setOnInsert: { createdAt: record.createdAt } }, { upsert: true });
+    const { createdAt, ...templateUpdates } = record;
+    await templates.updateOne({ templateId: record.templateId, ownerId: session.userId }, { $set: templateUpdates, $setOnInsert: { createdAt } }, { upsert: true });
     await writeAudit(db, { actorId: session.userId, action: 'notification_template.saved', targetType: 'template', targetId: record.templateId, details: { name: record.name } });
     return json(201, { template: { templateId: record.templateId, name: record.name, message: record.message, audience: record.audience, channel: record.channel } });
   } catch (error) {
