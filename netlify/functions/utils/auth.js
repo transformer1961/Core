@@ -66,7 +66,16 @@ function decryptSession(token) {
 
 function parseCookies(event) {
   const header = event.headers.cookie || event.headers.Cookie || '';
-  return Object.fromEntries(header.split(';').map((part) => part.trim().split('=')));
+  const result = {};
+  for (const part of header.split(';')) {
+    const index = part.indexOf('=');
+    if (index === -1) continue;
+    const name = part.slice(0, index).trim();
+    // Only split on the FIRST '=' so cookie values containing '=' survive.
+    const value = part.slice(index + 1).trim();
+    if (name) result[name] = value;
+  }
+  return result;
 }
 
 function getSession(event) {

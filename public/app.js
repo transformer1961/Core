@@ -178,82 +178,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const commandHistoryList = document.getElementById('command-history-list');
     const auditList = document.getElementById('audit-list');
 
-    const STORAGE_KEY = 'sns-owner-panel-state';
-    const getOwnerState = () => {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) {
-          return {
-            kepler: 'Armed',
-            watchdog: 'Online',
-            moderation: 'Enabled',
-            escalation: 'Queued',
-            incidents: [
-              'Guild moderation sweep completed',
-              'Kepler watch heartbeat acknowledged',
-              'Manual review queue refreshed'
-            ]
-          };
-        }
-        return JSON.parse(raw);
-      } catch {
-        return {
-          kepler: 'Armed',
-          watchdog: 'Online',
-          moderation: 'Enabled',
-          escalation: 'Queued',
-          incidents: []
-        };
-      }
-    };
-
-    const saveOwnerState = (next) => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // no-op fallback in restricted local environments
-      }
-    };
-
-    const applyOwnerState = () => {
-      const state = getOwnerState();
-      if (keplerLabel) keplerLabel.textContent = state.kepler || 'Armed';
-      if (watchdogLabel) watchdogLabel.textContent = state.watchdog || 'Online';
-      if (moderationLabel) moderationLabel.textContent = state.moderation || 'Enabled';
-      if (escalationLabel) escalationLabel.textContent = state.escalation || 'Queued';
-
-      if (incidentFeed) {
-        incidentFeed.innerHTML = '';
-        const incidents = state.incidents && state.incidents.length ? state.incidents : [
-          'Guild moderation sweep completed',
-          'Kepler watch heartbeat acknowledged',
-          'Manual review queue refreshed'
-        ];
-
-        incidents.slice(0, 6).forEach((entry, index) => {
-          const item = document.createElement('li');
-          const time = document.createElement('div');
-          time.className = 'incident-time';
-          time.textContent = index === 0 ? 'Now' : `${index * 12}m`;
-          const text = document.createElement('div');
-          text.textContent = entry;
-          item.appendChild(time);
-          item.appendChild(text);
-          incidentFeed.appendChild(item);
-        });
-      }
-    };
-
-    const setFeedback = (message, tone = 'neutral') => {
-      if (!feedback) return;
-      feedback.textContent = message;
-      feedback.className = `owner-feedback ${tone}`;
-    };
-
-    const markRefreshed = () => {
-      if (refreshTime) refreshTime.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
-    };
-
     const escapeHtml = (value) => String(value).replace(/[&<>'"]/g, (character) => ({
       '&': '&amp;',
       '<': '&lt;',
@@ -261,6 +185,97 @@ document.addEventListener('DOMContentLoaded', () => {
       "'": '&#39;',
       '"': '&quot;',
     }[character]));
+
+    const formatRelativeTime = (timestamp) => {
+      const date = new Date(timestamp);
+      if (Number.isNaN(date.getTime())) return '';
+      const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+      if (seconds < 60) return 'now';
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      return `${Math.floor(hours / 24)}d ago`;
+    };
+
+    const setStatusValue = (element, text, tone) => {
+      if (!element) return;
+      element.textContent = text;
+      element.classList.remove('success', 'pending', 'danger');
+      if (tone) element.classList.add(tone);
+    };
+
+    // Live overview — one fetch fills the overview, bot health, posture,
+    // event feed, and per-bot protection panels with real data.
+    const loadOwnerOverview = async () => {
+      const data = await fetch('/api/owner/overview', { credentials: 'same-origin' }).then((response) => {
+        if (!response.ok) throw new Error(`Overview unavailable (${response.status})`);
+        return response.json();
+      });
+
+      // Overview metrics
+      const setText = (id, value) => { const node = document.getElementById(id); if (node) node.textContent = value; };
+      setText('owner-bots-online', `${data.counts.online}/${data.counts.total}`);
+      setText('owner-guild-count', data.counts.totalGuilds);
+      setText('owner-active-incidents', data.counts.activeIncidents);
+      setText('owner-queued-commands', data.security.queuedCommands);
+
+      const pendingChip = document.getElementById('overview-pending-chip');
+      if (pendingChip) {
+        pendingChip.hidden = data.counts.pending === 0;
+        pendingChip.textContent = `${data.counts.pending} pending approval`;
+      }
+
+      // Bot health list
+      const healthList = document.getElementById('bot-health-list');
+      if (healthList) {
+        healthList.innerHTML = data.bots.length
+          ? data.bots.map((bot) => `<div class="table-row"><span><strong>${escapeHtml(bot.name)}</strong> <span class="bot-id">${escapeHtml(bot.botId)}</span></span><strong class="bot-health ${escapeHtml(bot.health)}">${escapeHtml(bot.health)}</strong></div>`).join('')
+          : '<p class="empty-state">No bots registered yet.</p>';
+      }
+
+      // Security posture
+      const posture = data.security;
+      setStatusValue(document.getElementById('posture-delivery'), posture.globallyDisabled ? 'Disabled globally' : 'Enabled', posture.globallyDisabled ? 'danger' : 'success');
+      setStatusValue(document.getElementById('posture-pending'), String(posture.pendingApprovals), posture.pendingApprovals > 0 ? 'pending' : 'success');
+      setStatusValue(document.getElementById('posture-stale'), String(posture.staleBots), posture.staleBots > 0 ? 'pending' : 'success');
+      setStatusValue(document.getElementById('posture-offline'), String(posture.offlineActiveBots), posture.offlineActiveBots > 0 ? 'danger' : 'success');
+      setStatusValue(document.getElementById('posture-access'), `${data.session.role} · ${data.session.permissions.length || 'all'} permission(s)`, 'success');
+
+      const postureChip = document.getElementById('posture-chip');
+      if (postureChip) {
+        const issues = (posture.globallyDisabled ? 1 : 0) + posture.pendingApprovals + posture.staleBots + posture.offlineActiveBots;
+        postureChip.textContent = issues === 0 ? 'All clear' : `${issues} to review`;
+        postureChip.classList.toggle('danger', issues > 0);
+      }
+
+      // Real event feed
+      if (incidentFeed) {
+        incidentFeed.innerHTML = data.events.length
+          ? data.events.slice(0, 8).map((entry) => {
+            const item = document.createElement('li');
+            const time = document.createElement('div');
+            time.className = 'incident-time';
+            time.textContent = formatRelativeTime(entry.timestamp);
+            const text = document.createElement('div');
+            text.textContent = entry.message || entry.event;
+            item.appendChild(time);
+            item.appendChild(text);
+            return item;
+          }).reduce((fragment, item) => { fragment.appendChild(item); return fragment; }, document.createDocumentFragment())
+          : '<li><div class="incident-time">–</div><div>No events reported yet.</div></li>';
+      }
+
+      // Per-bot protection panel follows the selected bot in the dropdown.
+      const selectedBotId = botSelect?.value;
+      const selected = data.bots.find((bot) => bot.botId === selectedBotId) || data.bots[0];
+      if (selected) {
+        setStatusValue(keplerLabel, selected.keplerStatus, selected.keplerStatus === 'triggered' ? 'danger' : 'success');
+        setStatusValue(watchdogLabel, selected.health, selected.health === 'online' ? 'success' : selected.health === 'stale' ? 'pending' : 'danger');
+        setStatusValue(moderationLabel, formatUptime(selected.uptimeSeconds), 'success');
+        setStatusValue(escalationLabel, selected.latencyMs == null ? '–' : `${selected.latencyMs} ms`, 'success');
+      }
+    };
 
     const queueCommand = async (command, requiresConfirmation = false) => {
       const botId = botSelect?.value;
@@ -278,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Command could not be queued');
       setFeedback(`${command.replace('_', ' ')} queued for ${botId}. Command ID: ${data.commandId}`, 'success');
-      updateIncidentList(`${command.replace('_', ' ')} queued for ${botId}`);
+      loadOwnerOverview().catch(() => {});
     };
 
     const loadBots = async () => {
@@ -351,41 +366,23 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
-    const updateIncidentList = (message) => {
-      const state = getOwnerState();
-      const updated = [message, ...(state.incidents || [])].slice(0, 6);
-      saveOwnerState({ ...state, incidents: updated });
-      applyOwnerState();
-    };
-
     document.querySelectorAll('[data-owner-action]').forEach((button) => {
       button.addEventListener('click', async () => {
         const action = button.dataset.ownerAction;
-        const state = getOwnerState();
 
         if (action === 'arm-kepler') {
           try { await queueCommand('enable'); } catch (error) { setFeedback(error.message, 'warning'); return; }
-          state.kepler = 'Armed';
-          saveOwnerState(state);
           setFeedback('Kepler armed and waiting for escalation triggers.', 'success');
-          updateIncidentList('Kepler armed for the active guild set');
         }
 
         if (action === 'trigger-lockdown') {
           try { await queueCommand('trigger_lockdown', true); } catch (error) { setFeedback(error.message, 'warning'); return; }
-          state.kepler = 'Triggered';
-          state.watchdog = 'Alerting';
-          state.moderation = 'Locked';
-          state.escalation = 'Escalated';
-          saveOwnerState(state);
           setFeedback('Lockdown triggered and broadcast queued.', 'warning');
-          updateIncidentList('Lockdown broadcast triggered for protected guilds');
         }
 
         if (action === 'restart-bot') {
           try { await queueCommand('restart'); } catch (error) { setFeedback(error.message, 'warning'); return; }
           setFeedback('Bot restart requested. Service will be refreshed shortly.', 'neutral');
-          updateIncidentList('Bot restart command queued');
         }
 
         if (action === 'shutdown-bot') {
@@ -396,12 +393,16 @@ document.addEventListener('DOMContentLoaded', () => {
           if (!window.confirm('Trigger a new Railway deployment for this bot service?')) return;
           try { await queueCommand('deploy_update', true); } catch (error) { setFeedback(error.message, 'warning'); return; }
           setFeedback('Deploy update queued. Railway will restart the service after the build completes.', 'success');
-          updateIncidentList('Deploy update queued for the bot service');
         }
 
-        applyOwnerState();
+        loadOwnerOverview().catch(() => {});
       });
     });
+
+    // Changing the bot dropdown re-targets the protection panel.
+    if (botSelect) {
+      botSelect.addEventListener('change', () => loadOwnerOverview().catch(() => {}));
+    }
 
     const sendAlertButton = document.querySelector('[data-send-notice="true"]');
     const previewNoticeButton = document.querySelector('[data-preview-notice="true"]');
@@ -454,7 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const data = await response.json();
           if (!response.ok) throw new Error(data.error || 'Notification could not be queued');
           setFeedback(`Notification queued for ${botId}. Command ID: ${data.commandId}`, 'success');
-          updateIncidentList('Notification queued for selected audience');
+          loadOwnerOverview().catch(() => {});
         } catch (error) {
           setFeedback(error.message, 'warning');
         }
@@ -641,6 +642,7 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshButton.textContent = 'Refreshing...';
         await loadStats();
         await loadBots();
+        await loadOwnerOverview();
         await loadCommandHistory();
         await loadAuditLog();
         markRefreshed();
@@ -683,7 +685,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let panelRefreshTimer;
     const refreshPanelData = async () => {
-      await Promise.all([loadBots(), loadCommandHistory(), loadAuditLog()]);
+      await Promise.all([loadBots(), loadOwnerOverview(), loadCommandHistory(), loadAuditLog()]);
       markRefreshed();
     };
 
@@ -695,9 +697,9 @@ document.addEventListener('DOMContentLoaded', () => {
       window.clearInterval(panelRefreshTimer);
     });
 
-    applyOwnerState();
     loadBots();
     loadAccess();
+    loadOwnerOverview().catch(() => {});
     loadCommandHistory();
     loadAuditLog();
     loadTemplates();

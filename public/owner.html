@@ -136,58 +136,84 @@
         </div>
 
         <div class="card metric-card">
-          <h2>Server overview</h2>
-          <p class="card-subtitle">Current fleet health at a glance.</p>
+          <div class="card-header-row">
+            <div>
+              <h2>Server overview</h2>
+              <p class="card-subtitle">Live fleet health, aggregated from registered bots.</p>
+            </div>
+            <span class="mini-pill" id="overview-pending-chip" hidden>0 pending</span>
+          </div>
           <div class="mini-grid">
             <div class="mini-stat">
-              <span>Guilds</span>
-              <strong id="owner-guild-count">12</strong>
+              <span>Bots online</span>
+              <strong id="owner-bots-online">–</strong>
             </div>
             <div class="mini-stat">
-              <span>Warn levels</span>
-              <strong id="owner-warn-level">2</strong>
+              <span>Guilds covered</span>
+              <strong id="owner-guild-count">–</strong>
             </div>
             <div class="mini-stat">
               <span>Active incidents</span>
-              <strong id="owner-active-incidents">1</strong>
+              <strong id="owner-active-incidents">–</strong>
             </div>
             <div class="mini-stat">
-              <span>Latency</span>
-              <strong id="owner-latency">42 ms</strong>
+              <span>Queued commands</span>
+              <strong id="owner-queued-commands">–</strong>
             </div>
           </div>
         </div>
       </div>
 
       <div class="owner-grid lower-grid">
-        <div class="card">
-          <h2>Protection status</h2>
-          <p class="card-subtitle">Guardrails currently applied to the workspace.</p>
-          <div class="table-list">
-            <div class="table-row"><span>Kepler</span><strong class="status-value success" id="kepler-status-label">Armed</strong></div>
-            <div class="table-row"><span>Watchdog</span><strong class="status-value success" id="watchdog-status-label">Online</strong></div>
-            <div class="table-row"><span>Auto moderation</span><strong class="status-value success" id="moderation-status-label">Enabled</strong></div>
-            <div class="table-row"><span>Escalations</span><strong class="status-value pending" id="escalation-status-label">Queued</strong></div>
+        <div class="card" id="bot-health-card">
+          <div class="card-header-row">
+            <div>
+              <h2>Bot health</h2>
+              <p class="card-subtitle">Live heartbeat data per registered bot.</p>
+            </div>
+            <span class="panel-live">Live</span>
+          </div>
+          <div class="table-list" id="bot-health-list">
+            <p class="empty-state">Loading bot health...</p>
           </div>
         </div>
 
+        <div class="card" id="security-posture-card">
+          <div class="card-header-row">
+            <div>
+              <h2>Security posture</h2>
+              <p class="card-subtitle">Checks computed from Core's live state.</p>
+            </div>
+            <span class="mini-pill" id="posture-chip">Checking…</span>
+          </div>
+          <div class="table-list">
+            <div class="table-row"><span>Command delivery</span><strong class="status-value" id="posture-delivery">–</strong></div>
+            <div class="table-row"><span>Pending bot approvals</span><strong class="status-value" id="posture-pending">–</strong></div>
+            <div class="table-row"><span>Stale bots (90s–5m silent)</span><strong class="status-value" id="posture-stale">–</strong></div>
+            <div class="table-row"><span>Active bots offline</span><strong class="status-value" id="posture-offline">–</strong></div>
+            <div class="table-row"><span>Your access level</span><strong class="status-value" id="posture-access">–</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="owner-grid lower-grid">
         <div class="card">
-          <h2>Incident feed</h2>
-          <p class="card-subtitle">Recent activity across protected guilds.</p>
+          <h2>Event feed</h2>
+          <p class="card-subtitle">Real events reported by your bots.</p>
           <ul class="incident-list" id="incident-feed-list">
-            <li>
-              <div class="incident-time">Now</div>
-              <div>Guild moderation sweep completed</div>
-            </li>
-            <li>
-              <div class="incident-time">12m</div>
-              <div>Kepler watch heartbeat acknowledged</div>
-            </li>
-            <li>
-              <div class="incident-time">36m</div>
-              <div>Manual review queue refreshed</div>
-            </li>
+            <li><div class="incident-time">…</div><div>Loading events…</div></li>
           </ul>
+        </div>
+
+        <div class="card">
+          <h2>Protection status</h2>
+          <p class="card-subtitle">Guardrails applied to the active bot (select one above).</p>
+          <div class="table-list">
+            <div class="table-row"><span>Kepler</span><strong class="status-value" id="kepler-status-label">–</strong></div>
+            <div class="table-row"><span>Bot heartbeat</span><strong class="status-value" id="watchdog-status-label">–</strong></div>
+            <div class="table-row"><span>Uptime</span><strong class="status-value" id="moderation-status-label">–</strong></div>
+            <div class="table-row"><span>Latency</span><strong class="status-value" id="escalation-status-label">–</strong></div>
+          </div>
         </div>
       </div>
 

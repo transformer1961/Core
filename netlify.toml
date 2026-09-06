@@ -56,6 +56,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/owner/overview"
+  to = "/.netlify/functions/owner-overview"
+  status = 200
+
+[[redirects]]
   from = "/api/auth/discord"
   to = "/.netlify/functions/auth-discord"
   status = 200
@@ -74,3 +79,38 @@
   from = "/api/auth/logout"
   to = "/.netlify/functions/auth-logout"
   status = 200
+
+# ── Security headers ──────────────────────────────────────────────
+# Applied to every response. The frontend is fully self-contained
+# (no external scripts/styles/fonts), so the CSP can stay strict.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Block MIME sniffing, clickjacking, referrer leakage, and XSS via CSP.
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    # Force HTTPS for a year once the domain is live on Netlify (which serves TLS).
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    # Only load our own scripts/styles/images; allow inline styles (used by
+    # the panel) and same-origin fetch/XHR for the API calls.
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.discordapp.com; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+
+# Stricter caching for the HTML pages (never cache authenticated shells),
+# while static assets can be cached by the CDN.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/styles.css"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/app.js"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
