@@ -74,12 +74,13 @@ exports.handler = async (event) => {
   try {
     const db = await getDb();
     const headerBotId = getHeader(event, 'x-sns-bot-id');
-    const botId = payload.botId || headerBotId || 'global';
-    if (botId !== 'global' && botId !== headerBotId) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'botId must match x-sns-bot-id' }) };
-    }
-    if (botId !== 'global' && !await authenticateBot(event, rawBody, false)) {
+    if (!headerBotId || !await authenticateBot(event, rawBody, false)) {
       return { statusCode: 401, body: JSON.stringify({ error: 'Registered bot authentication required' }) };
+    }
+
+    const botId = payload.botId || headerBotId;
+    if (botId !== headerBotId) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'botId must match x-sns-bot-id' }) };
     }
 
     if (payload.type === 'heartbeat') {
@@ -101,9 +102,7 @@ exports.handler = async (event) => {
         },
         { upsert: true }
       );
-      if (botId !== 'global') {
-        await db.collection('bots').updateOne({ botId }, { $set: { lastSeenAt: new Date(), status: 'active' } });
-      }
+      await db.collection('bots').updateOne({ botId }, { $set: { lastSeenAt: new Date(), status: 'active' } });
       return { statusCode: 200, body: JSON.stringify({ ok: true, type: 'heartbeat' }) };
     }
 
