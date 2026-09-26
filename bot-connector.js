@@ -10,13 +10,17 @@ function signPayload(rawBody, secret) {
 
 async function sendHeartbeat({ url, botId, token, secret, payload }) {
   const raw = JSON.stringify(payload);
+  const requestId = crypto.randomUUID();
+  const timestamp = String(Date.now());
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-sns-bot-id': botId,
       'x-sns-bot-token': token,
-      'x-sns-signature': signPayload(raw, secret),
+      'x-sns-request-id': requestId,
+      'x-sns-timestamp': timestamp,
+      'x-sns-signature': signPayload(`${timestamp}.${requestId}.${raw}`, secret),
     },
     body: raw,
   });
@@ -26,13 +30,17 @@ async function sendHeartbeat({ url, botId, token, secret, payload }) {
 
 async function sendEvent({ url, botId, token, secret, payload }) {
   const raw = JSON.stringify(payload);
+  const requestId = crypto.randomUUID();
+  const timestamp = String(Date.now());
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-sns-bot-id': botId,
       'x-sns-bot-token': token,
-      'x-sns-signature': signPayload(raw, secret),
+      'x-sns-request-id': requestId,
+      'x-sns-timestamp': timestamp,
+      'x-sns-signature': signPayload(`${timestamp}.${requestId}.${raw}`, secret),
     },
     body: raw,
   });
@@ -41,11 +49,15 @@ async function sendEvent({ url, botId, token, secret, payload }) {
 }
 
 async function claimCommand({ url, botId, token, secret }) {
+  const requestId = crypto.randomUUID();
+  const timestamp = String(Date.now());
   const response = await fetch(url, {
     headers: {
       'x-sns-bot-id': botId,
       'x-sns-bot-token': token,
-      'x-sns-signature': signPayload('', secret),
+      'x-sns-request-id': requestId,
+      'x-sns-timestamp': timestamp,
+      'x-sns-signature': signPayload(`${timestamp}.${requestId}.`, secret),
     },
   });
 
@@ -55,13 +67,17 @@ async function claimCommand({ url, botId, token, secret }) {
 async function reportCommand({ url, botId, token, secret, commandId, status, result, error }) {
   const payload = { commandId, status, result, error };
   const raw = JSON.stringify(payload);
+  const requestId = crypto.randomUUID();
+  const timestamp = String(Date.now());
   const response = await fetch(url, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
       'x-sns-bot-id': botId,
       'x-sns-bot-token': token,
-      'x-sns-signature': signPayload(raw, secret),
+      'x-sns-request-id': requestId,
+      'x-sns-timestamp': timestamp,
+      'x-sns-signature': signPayload(`${timestamp}.${requestId}.${raw}`, secret),
     },
     body: raw,
   });

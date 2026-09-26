@@ -32,37 +32,20 @@
 //   "sentBy": "system"
 // }
 
-const crypto = require('crypto');
 const { getDb } = require('./utils/db');
-const { authenticateBot, getHeader } = require('./utils/bot-auth');
-
-function isValidSignature(rawBody, signatureHeader, secret) {
-  if (!signatureHeader) return false;
-  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-  // timing-safe compare
-  const a = Buffer.from(expected, 'utf8');
-  const b = Buffer.from(signatureHeader, 'utf8');
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
+const { authenticateBot, getHeader, isFreshRequestTimestamp } = require('./utils/bot-auth');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  const secret = process.env.BOT_WEBHOOK_SECRET;
-  if (!secret) {
+  if (!process.env.BOT_WEBHOOK_SECRET) {
     console.error('BOT_WEBHOOK_SECRET is not set');
     return { statusCode: 500, body: 'Server misconfigured' };
   }
 
-  const signature = event.headers['x-sns-signature'];
   const rawBody = event.body || '';
-
-  if (!isValidSignature(rawBody, signature, secret)) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Invalid signature' }) };
-  }
 
   let payload;
   try {
@@ -74,8 +57,23 @@ exports.handler = async (event) => {
   try {
     const db = await getDb();
     const headerBotId = getHeader(event, 'x-sns-bot-id');
-    if (!headerBotId || !await authenticateBot(event, rawBody, false)) {
+    const requestId = getHeader(event, 'x-sns-request-id');
+    const timestamp = getHeader(event, 'x-sns-timestamp');
+    if (!headerBotId || !requestId || !isFreshRequestTimestamp(timestamp) || !await authenticateBot(event, rawBody, false)) {
       return { statusCode: 401, body: JSON.stringify({ error: 'Registered bot authentication required' }) };
+    }
+
+    try {
+      await db.collection('request_deduplication').insertOne({
+        _id: `${headerBotId}:${requestId}`,
+        botId: headerBotId,
+        requestId,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      });
+    } catch (error) {
+      if (error?.code === 11000) return { statusCode: 409, body: JSON.stringify({ error: 'Duplicate or replayed request' }) };
+      throw error;
     }
 
     const botId = payload.botId || headerBotId;
@@ -102,7 +100,13 @@ exports.handler = async (event) => {
         },
         { upsert: true }
       );
-      await db.collection('bots').updateOne({ botId }, { $set: { lastSeenAt: new Date(), status: 'active' } });
+      const heartbeatBot = await db.collection('bots').updateOne(
+        { botId, status: 'active' },
+        { $set: { lastSeenAt: new Date() } }
+      );
+      if (!heartbeatBot.matchedCount) {
+        return { statusCode: 409, body: JSON.stringify({ error: 'Bot is no longer active' }) };
+      }
       return { statusCode: 200, body: JSON.stringify({ ok: true, type: 'heartbeat' }) };
     }
 

@@ -9,6 +9,7 @@
 const { getDb } = require('./utils/db');
 const { getSession, hasPermission } = require('./utils/auth');
 const { allowRateLimit, getClientKey, isGloballyDisabled } = require('./utils/security');
+const { getBotHealth } = require('./utils/serviceLifecycle');
 
 function json(statusCode, body) {
   return {
@@ -16,15 +17,6 @@ function json(statusCode, body) {
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     body: JSON.stringify(body),
   };
-}
-
-function getHealth(bot) {
-  if (['pending', 'denied', 'revoked'].includes(bot.status)) return bot.status;
-  if (!bot.lastSeenAt) return 'offline';
-  const ageMs = Date.now() - new Date(bot.lastSeenAt).getTime();
-  if (ageMs <= 90 * 1000) return 'online';
-  if (ageMs <= 5 * 60 * 1000) return 'stale';
-  return 'offline';
 }
 
 function summarizeSession(session) {
@@ -83,7 +75,7 @@ exports.handler = async (event) => {
         botId: bot.botId,
         name: bot.name,
         status: bot.status,
-        health: getHealth(bot),
+        health: getBotHealth(bot),
         lastSeenAt: bot.lastSeenAt || null,
         online: status?.online ?? false,
         guilds: status?.guilds ?? 0,

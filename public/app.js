@@ -177,6 +177,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const accessList = document.getElementById('access-list');
     const commandHistoryList = document.getElementById('command-history-list');
     const auditList = document.getElementById('audit-list');
+    const auditActorFilter = document.getElementById('audit-actor-filter');
+    const auditActionFilter = document.getElementById('audit-action-filter');
+    const auditTargetFilter = document.getElementById('audit-target-filter');
+    const auditFilterButton = document.getElementById('audit-filter-button');
+    const incidentOperationsList = document.getElementById('incident-operations-list');
+    const incidentDetail = document.getElementById('incident-detail');
+    const incidentCountLabel = document.getElementById('incident-count-label');
+    const incidentStatusFilter = document.getElementById('incident-status-filter');
+    const incidentSeverityFilter = document.getElementById('incident-severity-filter');
+    let selectedIncidentId = null;
 
     const escapeHtml = (value) => String(value).replace(/[&<>'"]/g, (character) => ({
       '&': '&amp;',
@@ -277,6 +287,104 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
+    const renderIncidentDetail = (incident) => {
+      if (!incidentDetail) return;
+      if (!incident) {
+        incidentDetail.innerHTML = '<p class="empty-state">Select an incident to inspect its timeline.</p>';
+        return;
+      }
+
+      const timeline = Array.isArray(incident.timeline) ? incident.timeline : [];
+      incidentDetail.innerHTML = `
+        <div class="incident-detail-header">
+          <div>
+            <span class="incident-id">${escapeHtml(incident.id || 'Unknown')}</span>
+            <h3>${escapeHtml(incident.title || 'Untitled incident')}</h3>
+          </div>
+          <span class="incident-badge ${escapeHtml(incident.severity || 'medium')}">${escapeHtml(incident.severity || 'medium')}</span>
+        </div>
+        <div class="incident-detail-meta">
+          <span>Status <strong>${escapeHtml(incident.status)}</strong></span>
+          <span>Owner <strong>${escapeHtml(incident.owner || 'unassigned')}</strong></span>
+          <span>Guild <strong>${escapeHtml(incident.guildId || 'all')}</strong></span>
+          <span>Updated <strong>${escapeHtml(formatRelativeTime(incident.updatedAt))}</strong></span>
+        </div>
+        <p class="incident-reason">${escapeHtml(incident.reason || 'No reason recorded.')}</p>
+        ${incident.resolution ? `<p class="incident-resolution"><strong>Resolution:</strong> ${escapeHtml(incident.resolution)}</p>` : ''}
+        <div class="incident-timeline">
+          <h4>Timeline</h4>
+          ${timeline.length ? timeline.slice().reverse().map((entry) => `<div class="timeline-entry"><span>${escapeHtml(formatRelativeTime(entry.createdAt))}</span><div><strong>${escapeHtml(entry.action || 'updated')}</strong><p>${escapeHtml(entry.note || 'No note recorded.')}</p><small>${escapeHtml(entry.actor || 'system')}</small></div></div>`).join('') : '<p class="empty-state">No timeline entries recorded.</p>'}
+        </div>
+        <form class="incident-update-form" data-incident-id="${escapeHtml(incident.id)}">
+          <label class="composer-field"><span>Next status</span><select name="status"><option value="">Keep ${escapeHtml(incident.status)}</option>${['assigned', 'investigating', 'monitoring', 'resolved', 'closed'].map((status) => `<option value="${status}">${status}</option>`).join('')}</select></label>
+          <label class="composer-field"><span>Owner</span><input name="owner" value="${escapeHtml(incident.owner || '')}" placeholder="Optional owner ID" /></label>
+          <label class="composer-field full-width"><span>Update note</span><textarea name="note" rows="3" required placeholder="Record why this change is being made"></textarea></label>
+          <label class="composer-field full-width"><span>Resolution notes</span><textarea name="resolution" rows="3" placeholder="Required when resolving an incident">${escapeHtml(incident.resolution || '')}</textarea></label>
+          <button class="owner-action primary" type="submit">Save incident update</button>
+        </form>`;
+    };
+
+    const loadIncidents = async () => {
+      if (!incidentOperationsList) return;
+      const params = new URLSearchParams({
+        status: incidentStatusFilter?.value || 'all',
+        severity: incidentSeverityFilter?.value || 'all',
+      });
+      try {
+        const response = await fetch(`/api/incidents?${params.toString()}`, { credentials: 'same-origin' });
+        if (!response.ok) throw new Error(response.status === 403 ? 'Incident permission required.' : 'Failed to load incidents.');
+        const data = await response.json();
+        const incidents = data.incidents || [];
+        if (incidentCountLabel) incidentCountLabel.textContent = `${incidents.length} incident${incidents.length === 1 ? '' : 's'}`;
+        if (!incidents.some((incident) => incident.id === selectedIncidentId)) selectedIncidentId = incidents[0]?.id || null;
+        incidentOperationsList.innerHTML = incidents.length
+          ? incidents.map((incident) => `<button type="button" class="incident-operation-row ${incident.id === selectedIncidentId ? 'selected' : ''}" data-incident-id="${escapeHtml(incident.id)}"><span><strong>${escapeHtml(incident.title || 'Untitled incident')}</strong><small>${escapeHtml(incident.id)} · ${escapeHtml(incident.owner || 'unassigned')}</small></span><span class="incident-row-meta"><b class="incident-badge ${escapeHtml(incident.severity || 'medium')}">${escapeHtml(incident.severity || 'medium')}</b><small>${escapeHtml(incident.status)}</small></span></button>`).join('')
+          : '<p class="empty-state">No incidents match the selected filters.</p>';
+        renderIncidentDetail(incidents.find((incident) => incident.id === selectedIncidentId));
+      } catch (error) {
+        incidentOperationsList.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`;
+        renderIncidentDetail(null);
+      }
+    };
+
+    if (incidentStatusFilter) incidentStatusFilter.addEventListener('change', loadIncidents);
+    if (incidentSeverityFilter) incidentSeverityFilter.addEventListener('change', loadIncidents);
+    if (incidentOperationsList) {
+      incidentOperationsList.addEventListener('click', (event) => {
+        const row = event.target.closest('[data-incident-id]');
+        if (!row) return;
+        selectedIncidentId = row.dataset.incidentId;
+        loadIncidents().catch(() => {});
+      });
+    }
+    if (incidentDetail) {
+      incidentDetail.addEventListener('submit', async (event) => {
+        const form = event.target.closest('.incident-update-form');
+        if (!form) return;
+        event.preventDefault();
+        const formData = new FormData(form);
+        const status = String(formData.get('status') || '');
+        const owner = String(formData.get('owner') || '').trim();
+        const note = String(formData.get('note') || '').trim();
+        const resolution = String(formData.get('resolution') || '').trim();
+        try {
+          const response = await fetch('/api/incidents', {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ incidentId: form.dataset.incidentId, ...(status ? { status } : {}), ...(owner ? { owner } : {}), note, ...(resolution ? { resolution } : {}) }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Incident update failed.');
+          setFeedback('Incident update recorded.', 'success');
+          await loadIncidents();
+          loadOwnerOverview().catch(() => {});
+        } catch (error) {
+          setFeedback(error.message, 'warning');
+        }
+      });
+    }
+
     const queueCommand = async (command, requiresConfirmation = false) => {
       const botId = botSelect?.value;
       if (!botId) {
@@ -317,8 +425,23 @@ document.addEventListener('DOMContentLoaded', () => {
           ? bots.map((bot) => `<option value="${escapeHtml(bot.botId)}">${escapeHtml(bot.name)}</option>`).join('')
           : '<option value="">No bots registered</option>';
         botList.innerHTML = bots.length
-          ? bots.map((bot) => `<div class="bot-list-item"><div><strong>${escapeHtml(bot.name)}</strong><span class="bot-id">${escapeHtml(bot.botId)}</span><span class="bot-seen">${bot.lastSeenAt ? `Last seen ${escapeHtml(new Date(bot.lastSeenAt).toLocaleString())}` : 'No heartbeat yet'}</span></div><div class="bot-list-meta"><span class="bot-health ${escapeHtml(bot.health || bot.status || 'pending')}">${escapeHtml(bot.health || bot.status || 'pending')}</span>${['owner', 'admin'].includes(sessionRole) && bot.status === 'pending' ? `<button type="button" class="bot-review approve" data-bot-review="active" data-bot-id="${escapeHtml(bot.botId)}">Approve</button><button type="button" class="bot-review deny" data-bot-review="denied" data-bot-id="${escapeHtml(bot.botId)}">Deny</button>` : ''}${sessionRole === 'owner' && bot.status === 'active' ? `<button type="button" class="bot-review" data-bot-credential="rotate" data-bot-id="${escapeHtml(bot.botId)}">Rotate</button><button type="button" class="bot-review deny" data-bot-credential="revoke" data-bot-id="${escapeHtml(bot.botId)}">Revoke</button>` : ''}${sessionRole === 'owner' ? `<button type="button" class="bot-review deny" data-bot-remove="true" data-bot-id="${escapeHtml(bot.botId)}">Remove</button>` : ''}</div></div>`).join('')
+          ? bots.map((bot) => `<div class="bot-list-item"><div><strong>${escapeHtml(bot.name)}</strong><span class="bot-id">${escapeHtml(bot.botId)}</span><span class="bot-seen">${bot.lastSeenAt ? `Last seen ${escapeHtml(new Date(bot.lastSeenAt).toLocaleString())}` : 'No heartbeat yet'}</span></div><div class="bot-list-meta"><span class="bot-health ${escapeHtml(bot.health || bot.status || 'pending')}">${escapeHtml(bot.health || bot.status || 'pending')}</span>${['owner', 'admin'].includes(sessionRole) && bot.status === 'pending' ? `<button type="button" class="bot-review approve" data-bot-review="active" data-bot-id="${escapeHtml(bot.botId)}">Approve</button><button type="button" class="bot-review deny" data-bot-review="denied" data-bot-id="${escapeHtml(bot.botId)}">Deny</button>` : ''}${sessionRole === 'owner' && bot.status === 'active' ? `<button type="button" class="bot-review warning" data-bot-lifecycle="suspend" data-bot-id="${escapeHtml(bot.botId)}">Suspend</button><button type="button" class="bot-review" data-bot-credential="rotate" data-bot-id="${escapeHtml(bot.botId)}">Rotate</button><button type="button" class="bot-review deny" data-bot-credential="revoke" data-bot-id="${escapeHtml(bot.botId)}">Revoke</button>` : ''}${sessionRole === 'owner' && bot.status === 'suspended' ? `<button type="button" class="bot-review approve" data-bot-lifecycle="reactivate" data-bot-id="${escapeHtml(bot.botId)}">Reactivate</button>` : ''}${sessionRole === 'owner' ? `<button type="button" class="bot-review deny" data-bot-remove="true" data-bot-id="${escapeHtml(bot.botId)}">Remove</button>` : ''}</div></div>`).join('')
           : '<p class="empty-state">No bots registered yet.</p>';
+        botList.querySelectorAll('.bot-list-item').forEach((item, index) => {
+          const bot = bots[index];
+          const scope = document.createElement('span');
+          scope.className = 'bot-scope';
+          scope.textContent = `Owners: ${(bot.ownerIds || []).join(', ') || 'None'} | Guilds: ${(bot.guildIds || []).join(', ') || 'All / not scoped'} | Permissions: ${(bot.permissions || []).join(', ') || 'Not configured'}`;
+          item.firstElementChild.appendChild(scope);
+          if (sessionRole === 'owner') {
+            const scopeButton = document.createElement('button');
+            scopeButton.type = 'button';
+            scopeButton.className = 'bot-review';
+            scopeButton.dataset.botScope = bot.botId;
+            scopeButton.textContent = 'Scope';
+            item.lastElementChild.appendChild(scopeButton);
+          }
+        });
         if (botCountLabel) botCountLabel.textContent = `${bots.length} registered`;
       } catch (error) {
         console.warn('Bot registry unavailable:', error);
@@ -357,7 +480,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadAuditLog = async () => {
       if (!auditList) return;
       try {
-        const response = await fetch('/api/audit-log', { credentials: 'same-origin' });
+        const params = new URLSearchParams();
+        if (auditActorFilter?.value.trim()) params.set('actorId', auditActorFilter.value.trim());
+        if (auditActionFilter?.value.trim()) params.set('action', auditActionFilter.value.trim());
+        if (auditTargetFilter?.value.trim()) params.set('targetId', auditTargetFilter.value.trim());
+        const response = await fetch(`/api/audit-log?${params.toString()}`, { credentials: 'same-origin' });
         if (!response.ok) throw new Error('Failed to load audit log');
         const data = await response.json();
         auditList.innerHTML = (data.records || []).map((record) => `<div class="audit-row"><strong>${escapeHtml(record.action)}</strong><span>${escapeHtml(record.targetType)}${record.targetId ? `: ${escapeHtml(record.targetId)}` : ''}</span><span>${escapeHtml(record.actorId)} · ${escapeHtml(new Date(record.createdAt).toLocaleString())}</span></div>`).join('') || '<p class="empty-state">No audit events yet.</p>';
@@ -365,6 +492,8 @@ document.addEventListener('DOMContentLoaded', () => {
         auditList.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`;
       }
     };
+
+    auditFilterButton?.addEventListener('click', loadAuditLog);
 
     document.querySelectorAll('[data-owner-action]').forEach((button) => {
       button.addEventListener('click', async () => {
@@ -613,6 +742,49 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           return;
         }
+        const scopeButton = event.target.closest('[data-bot-scope]');
+        if (scopeButton) {
+          const current = bots.find((bot) => bot.botId === scopeButton.dataset.botScope)?.permissions || [];
+          const commands = ['enable', 'disable', 'restart', 'shutdown', 'deploy_update', 'trigger_lockdown', 'broadcast_notice'];
+          const editor = document.createElement('form');
+          editor.className = 'bot-scope-editor';
+          editor.innerHTML = `<strong>Allowed commands</strong><div class="bot-scope-options">${commands.map((command) => `<label><input type="checkbox" name="permission" value="${command}" ${current.includes('*') || current.includes(command) ? 'checked' : ''}> ${command}</label>`).join('')}</div><div class="bot-scope-actions"><button type="submit" class="bot-review approve">Save</button><button type="button" class="bot-review" data-scope-cancel>Cancel</button></div>`;
+          scopeButton.parentElement.appendChild(editor);
+          scopeButton.disabled = true;
+          editor.querySelector('[data-scope-cancel]').addEventListener('click', () => { editor.remove(); scopeButton.disabled = false; });
+          editor.addEventListener('submit', async (submitEvent) => {
+            submitEvent.preventDefault();
+            const permissions = [...editor.querySelectorAll('input[name="permission"]:checked')].map((input) => input.value);
+            scopeButton.disabled = true;
+            try {
+            const response = await fetch('/api/bots', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botId: scopeButton.dataset.botScope, action: 'permissions', permissions }) });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Service scope update failed');
+            setFeedback(`${scopeButton.dataset.botScope} command scope updated.`, 'success');
+            await loadBots();
+            } catch (error) {
+              setFeedback(error.message, 'warning');
+              scopeButton.disabled = false;
+            }
+          });
+          return;
+        }
+        const lifecycleButton = event.target.closest('[data-bot-lifecycle]');
+        if (lifecycleButton) {
+          if (!window.confirm(`${lifecycleButton.dataset.botLifecycle === 'suspend' ? 'Suspend' : 'Reactivate'} ${lifecycleButton.dataset.botId}?`)) return;
+          lifecycleButton.disabled = true;
+          try {
+            const response = await fetch('/api/bots', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ botId: lifecycleButton.dataset.botId, action: lifecycleButton.dataset.botLifecycle }) });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Lifecycle action failed');
+            setFeedback(`${lifecycleButton.dataset.botId} marked ${data.status}.`, data.status === 'suspended' ? 'warning' : 'success');
+            await loadBots();
+          } catch (error) {
+            setFeedback(error.message, 'warning');
+            lifecycleButton.disabled = false;
+          }
+          return;
+        }
         const reviewButton = event.target.closest('[data-bot-review]');
         if (!reviewButton) return;
         reviewButton.disabled = true;
@@ -643,6 +815,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadStats();
         await loadBots();
         await loadOwnerOverview();
+        await loadIncidents();
         await loadCommandHistory();
         await loadAuditLog();
         markRefreshed();
@@ -685,7 +858,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let panelRefreshTimer;
     const refreshPanelData = async () => {
-      await Promise.all([loadBots(), loadOwnerOverview(), loadCommandHistory(), loadAuditLog()]);
+      await Promise.all([loadBots(), loadOwnerOverview(), loadIncidents(), loadCommandHistory(), loadAuditLog()]);
       markRefreshed();
     };
 
@@ -700,6 +873,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadBots();
     loadAccess();
     loadOwnerOverview().catch(() => {});
+    loadIncidents();
     loadCommandHistory();
     loadAuditLog();
     loadTemplates();

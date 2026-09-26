@@ -25,6 +25,17 @@ function isValidTransition(from, to) {
   return allowed[current]?.includes(next) === true;
 }
 
+function getIncidentUpdateStatus(existingStatus, payload = {}) {
+  if (payload.status) return normalizeIncidentState(payload.status);
+  return payload.owner && normalizeIncidentState(existingStatus) === 'open'
+    ? 'assigned'
+    : normalizeIncidentState(existingStatus);
+}
+
+function hasResolutionNotes(existingResolution, nextResolution) {
+  return Boolean(String(nextResolution || existingResolution || '').trim());
+}
+
 function buildIncidentSummary(incident = {}) {
   return {
     id: incident.incidentId || incident.id,
@@ -34,6 +45,10 @@ function buildIncidentSummary(incident = {}) {
     owner: incident.owner,
     guildId: incident.guildId,
     reason: incident.reason,
+    resolution: incident.resolution || null,
+    createdAt: incident.createdAt || null,
+    updatedAt: incident.updatedAt || null,
+    timeline: Array.isArray(incident.timeline) ? incident.timeline : [],
   };
 }
 
@@ -41,5 +56,7 @@ module.exports = {
   INCIDENT_STATES,
   normalizeIncidentState,
   isValidTransition,
+  getIncidentUpdateStatus,
+  hasResolutionNotes,
   buildIncidentSummary,
 };

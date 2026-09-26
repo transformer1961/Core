@@ -164,6 +164,48 @@
         </div>
       </div>
 
+      <section class="card incident-workspace" aria-labelledby="incident-workspace-title">
+        <div class="card-header-row">
+          <div>
+            <h2 id="incident-workspace-title">Incident operations</h2>
+            <p class="card-subtitle">Review scoped incidents, inspect their timeline, and record the next controlled update.</p>
+          </div>
+          <span class="mini-pill" id="incident-count-label">0 incidents</span>
+        </div>
+        <div class="incident-controls">
+          <label class="toolbar-select" for="incident-status-filter">
+            <span class="sr-only">Incident status</span>
+            <select id="incident-status-filter">
+              <option value="all">All statuses</option>
+              <option value="open">Open</option>
+              <option value="assigned">Assigned</option>
+              <option value="investigating">Investigating</option>
+              <option value="monitoring">Monitoring</option>
+              <option value="resolved">Resolved</option>
+              <option value="closed">Closed</option>
+            </select>
+          </label>
+          <label class="toolbar-select" for="incident-severity-filter">
+            <span class="sr-only">Incident severity</span>
+            <select id="incident-severity-filter">
+              <option value="all">All severities</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </label>
+        </div>
+        <div class="incident-workspace-grid">
+          <div class="incident-operations-list" id="incident-operations-list" aria-live="polite">
+            <p class="empty-state">Loading incidents...</p>
+          </div>
+          <div class="incident-detail" id="incident-detail" aria-live="polite">
+            <p class="empty-state">Select an incident to inspect its timeline.</p>
+          </div>
+        </div>
+      </section>
+
       <div class="owner-grid lower-grid">
         <div class="card" id="bot-health-card">
           <div class="card-header-row">
@@ -237,6 +279,12 @@
             <p class="card-subtitle">Owner and system changes recorded by SNS Core.</p>
           </div>
           <span class="mini-pill">Recent 40</span>
+        </div>
+        <div class="audit-controls">
+          <input id="audit-actor-filter" placeholder="Actor ID" aria-label="Audit actor" />
+          <input id="audit-action-filter" placeholder="Action" aria-label="Audit action" />
+          <input id="audit-target-filter" placeholder="Target ID" aria-label="Audit target" />
+          <button class="refresh-button" type="button" id="audit-filter-button">Filter</button>
         </div>
         <div class="audit-list" id="audit-list" aria-live="polite">
           <p class="empty-state">Loading audit log...</p>

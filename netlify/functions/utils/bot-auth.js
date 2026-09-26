@@ -18,11 +18,22 @@ function isValidSignature(rawBody, signature) {
   return actualBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
+function getSignedMessage(event, rawBody) {
+  const timestamp = getHeader(event, 'x-sns-timestamp');
+  const requestId = getHeader(event, 'x-sns-request-id');
+  return timestamp && requestId ? `${timestamp}.${requestId}.${rawBody}` : rawBody;
+}
+
+function isFreshRequestTimestamp(timestamp, now = Date.now(), toleranceMs = 5 * 60 * 1000) {
+  const parsed = Number(timestamp);
+  return Number.isFinite(parsed) && Math.abs(now - parsed) <= toleranceMs;
+}
+
 async function authenticateBot(event, rawBody, checkGlobalDisable = true) {
   const botId = getHeader(event, 'x-sns-bot-id');
   const token = getHeader(event, 'x-sns-bot-token');
   const signature = getHeader(event, 'x-sns-signature');
-  if (!botId || !token || !isValidSignature(rawBody, signature)) return null;
+  if (!botId || !token || !isValidSignature(getSignedMessage(event, rawBody), signature)) return null;
 
   const bot = await (await getDb()).collection('bots').findOne({
     botId,
@@ -33,4 +44,4 @@ async function authenticateBot(event, rawBody, checkGlobalDisable = true) {
   return bot || null;
 }
 
-module.exports = { authenticateBot, getHeader };
+module.exports = { authenticateBot, getHeader, getSignedMessage, isFreshRequestTimestamp };

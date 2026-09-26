@@ -1,10 +1,12 @@
 const crypto = require('crypto');
 const { getDb } = require('./utils/db');
 const { getSession, hasPermission } = require('./utils/auth');
-const { authenticateBot, getHeader } = require('./utils/bot-auth');
+const { authenticateBot, getHeader, isFreshRequestTimestamp } = require('./utils/bot-auth');
 const { allowRateLimit, getClientKey, isGloballyDisabled, writeAudit } = require('./utils/security');
+const { SERVICE_COMMANDS } = require('./utils/servicePermissions');
+const { authorizeQueuedCommand } = require('./utils/commandAuthorization');
 
-const allowedCommands = new Set(['enable', 'disable', 'restart', 'shutdown', 'deploy_update', 'trigger_lockdown', 'broadcast_notice']);
+const allowedCommands = new Set(SERVICE_COMMANDS);
 
 function json(statusCode, body) {
   return {
@@ -53,10 +55,10 @@ exports.handler = async (event) => {
       const db = await getDb();
       if (!await allowRateLimit(db, `command:${getClientKey(event, session?.userId || 'admin-key')}`, 20, 60 * 1000)) return json(429, { error: 'Too many command requests' });
       if (payload.confirmed !== true && ['shutdown', 'trigger_lockdown'].includes(payload.command)) return json(409, { error: 'Explicit confirmation is required for this command' });
-      const bot = await db.collection('bots').findOne({ botId: payload.botId, status: 'active' }, { projection: { _id: 0, botId: 1, guildIds: 1, ownerIds: 1 } });
+      const bot = await db.collection('bots').findOne({ botId: payload.botId, status: 'active' }, { projection: { _id: 0, botId: 1, guildIds: 1, ownerIds: 1, permissions: 1 } });
       if (!bot) return json(409, { error: 'Bot must be registered and approved before receiving commands' });
-      const canAccessBot = session?.role === 'owner' || session?.permissions?.includes('*') || bot.ownerIds?.includes(session.userId) || bot.guildIds?.some((guildId) => session.guildIds?.includes(guildId));
-      if (!adminKeyValid && !canAccessBot) return json(403, { error: 'bot.command permission is not valid for this bot' });
+      const authorizationError = authorizeQueuedCommand({ session, bot, command: payload.command, guildId: payload.guildId, adminKeyValid });
+      if (authorizationError) return json(403, { error: authorizationError });
 
       const commands = db.collection('commands');
 
@@ -83,7 +85,22 @@ exports.handler = async (event) => {
 
     if (!await authenticateBot(event, rawBody)) return json(401, { error: 'Bot authentication required' });
     const botId = getHeader(event, 'x-sns-bot-id');
+    const requestId = getHeader(event, 'x-sns-request-id');
+    const timestamp = getHeader(event, 'x-sns-timestamp');
+    if (!requestId || !isFreshRequestTimestamp(timestamp)) return json(401, { error: 'Fresh signed request metadata is required' });
     const db = await getDb();
+    try {
+      await db.collection('request_deduplication').insertOne({
+        _id: `${botId}:${requestId}`,
+        botId,
+        requestId,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      });
+    } catch (error) {
+      if (error?.code === 11000) return json(409, { error: 'Duplicate or replayed request' });
+      throw error;
+    }
     const commands = db.collection('commands');
 
     if (event.httpMethod === 'GET') {
@@ -129,6 +146,15 @@ exports.handler = async (event) => {
     if (!result) return json(404, { error: 'Command not found for this bot' });
     await db.collection('command_history').insertOne({ commandId: payload.commandId, botId, command: result.command, status: payload.status, actorId: botId, result: payload.result || null, error: payload.error || null, createdAt: new Date() });
     await writeAudit(db, { actorId: botId, action: `command.${payload.status}`, targetType: 'command', targetId: payload.commandId, details: { result: payload.result || null, error: payload.error || null } });
+    if (result.command === 'broadcast_notice') {
+      await writeAudit(db, {
+        actorId: botId,
+        action: payload.status === 'completed' ? 'notification.delivered' : 'notification.failed',
+        targetType: 'command',
+        targetId: payload.commandId,
+        details: { result: payload.result || null, error: payload.error || null },
+      });
+    }
     return json(200, { ok: true, commandId: payload.commandId, status: result.status });
   } catch (error) {
     console.error('bot-commands error:', error);

@@ -1,6 +1,8 @@
 const { getDb } = require('./utils/db');
 const { getSession, hasPermission } = require('./utils/auth');
 const { allowRateLimit, createSecret, getClientKey, hashSecret, writeAudit } = require('./utils/security');
+const { getBotHealth } = require('./utils/serviceLifecycle');
+const { normalizeServicePermissions } = require('./utils/servicePermissions');
 
 function json(statusCode, body) {
   return {
@@ -24,15 +26,6 @@ function canReviewBot(session, bot) {
   return hasPermission(session, 'bot.approve', bot.guildIds?.[0] || null);
 }
 
-function getHealth(bot) {
-  if (['pending', 'denied', 'revoked'].includes(bot.status)) return bot.status;
-  if (!bot.lastSeenAt) return 'offline';
-  const ageMs = Date.now() - new Date(bot.lastSeenAt).getTime();
-  if (ageMs <= 90 * 1000) return 'online';
-  if (ageMs <= 5 * 60 * 1000) return 'stale';
-  return 'offline';
-}
-
 exports.handler = async (event) => {
   if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(event.httpMethod)) {
     return json(405, { error: 'Method Not Allowed' });
@@ -53,9 +46,9 @@ exports.handler = async (event) => {
         : { $or: [{ ownerIds: session.userId }, { guildIds: { $in: session.guildIds || [] } }] };
       const records = await bots.find(
         filter,
-        { projection: { _id: 0, botId: 1, name: 1, status: 1, guildIds: 1, createdAt: 1, lastSeenAt: 1 } }
+        { projection: { _id: 0, botId: 1, name: 1, status: 1, ownerIds: 1, guildIds: 1, permissions: 1, createdAt: 1, lastSeenAt: 1 } }
       ).sort({ name: 1 }).toArray();
-      records.forEach((record) => { record.health = getHealth(record); });
+      records.forEach((record) => { record.health = getBotHealth(record); });
       return json(200, { bots: records });
     }
 
@@ -70,6 +63,17 @@ exports.handler = async (event) => {
       if (!payload.botId) return json(400, { error: 'botId is required' });
       const targetBot = await bots.findOne({ botId: payload.botId });
       if (!targetBot || (payload.status && !canReviewBot(session, targetBot)) || (!payload.status && !canAccessBot(session, targetBot))) return json(404, { error: 'Bot not found' });
+      if (['suspend', 'reactivate'].includes(payload.action)) {
+        if (!canReviewBot(session, targetBot)) return json(403, { error: 'bot.approve permission required for lifecycle changes' });
+        const nextStatus = payload.action === 'suspend' ? 'suspended' : 'pending';
+        const lifecycleUpdate = payload.action === 'suspend'
+          ? { $set: { status: nextStatus, suspendedAt: new Date(), updatedAt: new Date() } }
+          : { $set: { status: nextStatus, reactivationRequestedAt: new Date(), updatedAt: new Date() }, $unset: { suspendedAt: '' } };
+        const changed = await bots.updateOne({ botId: payload.botId }, lifecycleUpdate);
+        if (!changed.matchedCount) return json(404, { error: 'Bot not found' });
+        await writeAudit(db, { actorId: session.userId, action: `bot.${payload.action === 'suspend' ? 'suspended' : 'reactivation_requested'}`, targetType: 'bot', targetId: payload.botId });
+        return json(200, { ok: true, botId: payload.botId, status: nextStatus, warning: nextStatus === 'pending' ? 'Approval is required before the bot can act again.' : undefined });
+      }
       if (['rotate', 'revoke'].includes(payload.action)) {
         if (!hasPermission(session, 'bot.delete')) return json(403, { error: 'bot.delete permission required for credential changes' });
         if (payload.action === 'revoke') {
@@ -83,6 +87,14 @@ exports.handler = async (event) => {
         if (!rotated.matchedCount) return json(404, { error: 'Bot not found' });
         await writeAudit(db, { actorId: session.userId, action: 'bot.secret_rotated', targetType: 'bot', targetId: payload.botId });
         return json(200, { ok: true, botId: payload.botId, status: 'pending', secret, warning: 'Store this new secret on the bot host. Approval is required again.' });
+      }
+      if (payload.action === 'permissions') {
+        if (session.role !== 'owner' && !session.permissions?.includes('*')) return json(403, { error: 'Owner permission required to change service permissions' });
+        const permissions = normalizeServicePermissions(payload.permissions);
+        const updated = await bots.updateOne({ botId: payload.botId }, { $set: { permissions, updatedAt: new Date() } });
+        if (!updated.matchedCount) return json(404, { error: 'Bot not found' });
+        await writeAudit(db, { actorId: session.userId, action: 'bot.permissions_updated', targetType: 'bot', targetId: payload.botId, details: { permissions } });
+        return json(200, { ok: true, botId: payload.botId, permissions });
       }
       if (!['active', 'denied'].includes(payload.status)) {
         return json(400, { error: 'status active or denied is required' });

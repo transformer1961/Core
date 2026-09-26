@@ -1,7 +1,8 @@
 const { getDb } = require('./utils/db');
 const { getSession, hasPermission } = require('./utils/auth');
+const { authenticateBot, getHeader, isFreshRequestTimestamp } = require('./utils/bot-auth');
 const { allowRateLimit, getClientKey, writeAudit } = require('./utils/security');
-const { buildIncidentSummary, isValidTransition, normalizeIncidentState } = require('./utils/incidentWorkflow');
+const { buildIncidentSummary, isValidTransition, normalizeIncidentState, getIncidentUpdateStatus, hasResolutionNotes } = require('./utils/incidentWorkflow');
 
 function json(statusCode, body) {
   return {
@@ -20,23 +21,47 @@ exports.handler = async (event) => {
     return json(405, { error: 'Method Not Allowed' });
   }
 
-  const session = getSession(event);
-  if (!hasPermission(session, 'bot.read') && !isOwner(session)) {
-    return json(403, { error: 'bot.read permission required' });
-  }
-
   try {
     const db = await getDb();
     const incidents = db.collection('incidents');
+    const session = getSession(event);
+    const query = event.queryStringParameters || {};
+    const botAuthBody = event.httpMethod === 'GET'
+      ? JSON.stringify({ incidentId: query.incidentId || null })
+      : (event.body || '');
+    const bot = session ? null : await authenticateBot(event, botAuthBody, false);
+    const authorizedRead = hasPermission(session, 'bot.read') || isOwner(session) || Boolean(bot);
+    if (!authorizedRead) return json(403, { error: 'bot.read permission required' });
+    const actorId = session?.userId || bot?.botId || 'system';
+    if (bot && event.httpMethod !== 'GET') {
+      const requestId = getHeader(event, 'x-sns-request-id');
+      const timestamp = getHeader(event, 'x-sns-timestamp');
+      if (!requestId || !isFreshRequestTimestamp(timestamp)) {
+        return json(401, { error: 'Fresh signed request metadata is required' });
+      }
+      try {
+        await db.collection('request_deduplication').insertOne({
+          _id: `${bot.botId}:${requestId}`,
+          botId: bot.botId,
+          requestId,
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        });
+      } catch (error) {
+        if (error?.code === 11000) return json(409, { error: 'Duplicate or replayed request' });
+        throw error;
+      }
+    }
     if (!await allowRateLimit(db, `incident:${getClientKey(event, session?.userId || 'anon')}`, 30, 60 * 1000)) {
       return json(429, { error: 'Too many incident requests' });
     }
 
     if (event.httpMethod === 'GET') {
-      const query = event.queryStringParameters || {};
       const filter = {};
-      if (query.status) filter.status = normalizeIncidentState(query.status);
+      if (query.status && query.status !== 'all') filter.status = normalizeIncidentState(query.status);
+      if (query.severity && query.severity !== 'all') filter.severity = query.severity;
       if (query.guildId) filter.guildId = query.guildId;
+      if (query.incidentId) filter.incidentId = query.incidentId;
       const records = await incidents.find(filter).sort({ updatedAt: -1 }).limit(100).toArray();
       return json(200, { incidents: records.map((incident) => buildIncidentSummary(incident)) });
     }
@@ -49,11 +74,15 @@ exports.handler = async (event) => {
     }
 
     if (event.httpMethod === 'POST') {
-      if (!hasPermission(session, 'bot.approve') && !isOwner(session)) {
+      if (!hasPermission(session, 'bot.approve') && !isOwner(session) && !bot) {
         return json(403, { error: 'bot.approve permission required to open incidents' });
       }
       if (!payload.title || !payload.reason) {
         return json(400, { error: 'title and reason are required' });
+      }
+      const initialStatus = normalizeIncidentState(payload.status || 'open');
+      if (!['open', 'assigned', 'investigating', 'monitoring'].includes(initialStatus)) {
+        return json(400, { error: 'Incidents must start in an active lifecycle state' });
       }
 
       const incidentId = `INC-${Date.now().toString(36).toUpperCase()}`;
@@ -61,20 +90,20 @@ exports.handler = async (event) => {
         incidentId,
         title: payload.title,
         severity: payload.severity || 'medium',
-        status: 'open',
-        owner: payload.owner || session.userId || 'unassigned',
+        status: initialStatus,
+        owner: payload.owner || actorId || 'unassigned',
         guildId: payload.guildId || null,
         reason: payload.reason,
         resolution: null,
-        createdBy: session.userId || 'system',
+        createdBy: actorId,
         createdAt: new Date(),
         updatedAt: new Date(),
-        timeline: [{ actor: session.userId || 'system', action: 'created', note: payload.reason, createdAt: new Date() }],
+        timeline: [{ actor: actorId, action: 'created', note: payload.reason, createdAt: new Date() }],
       };
 
       await incidents.insertOne(record);
       await writeAudit(db, {
-        actorId: session.userId || 'system',
+        actorId,
         action: 'incident.created',
         targetType: 'incident',
         targetId: incidentId,
@@ -89,31 +118,47 @@ exports.handler = async (event) => {
         return json(400, { error: 'incidentId is required' });
       }
 
+      if (!hasPermission(session, 'bot.approve') && !isOwner(session) && !bot) {
+        return json(403, { error: 'bot.approve permission required to update incidents' });
+      }
+
       const existing = await incidents.findOne({ incidentId: payload.incidentId });
       if (!existing) return json(404, { error: 'Incident not found' });
 
-      const nextStatus = payload.status ? normalizeIncidentState(payload.status) : existing.status;
-      if (payload.status && !isValidTransition(existing.status, nextStatus)) {
+      const nextStatus = getIncidentUpdateStatus(existing.status, payload);
+      if (nextStatus !== normalizeIncidentState(existing.status) && !isValidTransition(existing.status, nextStatus)) {
         return json(400, { error: `Invalid state transition from ${existing.status} to ${nextStatus}` });
+      }
+      if (nextStatus === 'resolved' && !hasResolutionNotes(existing.resolution, payload.resolution)) {
+        return json(400, { error: 'Resolution notes are required before resolving an incident' });
+      }
+      if (nextStatus === 'resolved' && payload.notificationCommandId) {
+        const notification = await db.collection('commands').findOne({
+          commandId: payload.notificationCommandId,
+          command: 'broadcast_notice',
+        });
+        if (!notification || notification.status !== 'completed') {
+          return json(409, { error: 'Incident cannot resolve until the linked notification is delivered' });
+        }
       }
 
       const update = { updatedAt: new Date() };
-      if (payload.status) update.status = nextStatus;
+      if (nextStatus !== existing.status) update.status = nextStatus;
       if (payload.owner) update.owner = payload.owner;
       if (payload.severity) update.severity = payload.severity;
       if (payload.reason) update.reason = payload.reason;
       if (payload.resolution) update.resolution = payload.resolution;
-      if (payload.note) {
-        update.$push = { timeline: { actor: session.userId || 'system', action: payload.status || 'updated', note: payload.note, createdAt: new Date() } };
-      }
+      const timelineEntry = payload.note
+        ? { actor: actorId, action: nextStatus !== existing.status ? nextStatus : 'updated', note: payload.note, createdAt: new Date() }
+        : null;
 
-      await incidents.updateOne({ incidentId: payload.incidentId }, { $set: update, ...(payload.note ? { $push: { timeline: { actor: session.userId || 'system', action: payload.status || 'updated', note: payload.note, createdAt: new Date() } } } : {}) });
+      await incidents.updateOne({ incidentId: payload.incidentId }, { $set: update, ...(timelineEntry ? { $push: { timeline: timelineEntry } } : {}) });
       await writeAudit(db, {
-        actorId: session.userId || 'system',
-        action: payload.status ? `incident.${payload.status}` : 'incident.updated',
+        actorId,
+        action: nextStatus !== existing.status ? `incident.${nextStatus}` : 'incident.updated',
         targetType: 'incident',
         targetId: payload.incidentId,
-        details: { status: nextStatus, owner: payload.owner || existing.owner, note: payload.note || null },
+        details: { status: nextStatus, owner: payload.owner || existing.owner, note: payload.note || null, notificationCommandId: payload.notificationCommandId || null },
       });
 
       const updated = await incidents.findOne({ incidentId: payload.incidentId });
